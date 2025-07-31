@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "linkedin-agent"
+version = "0.1.0"
+description = "A LinkedIn automation agent"
+authors = ["Li Yin <li.yin.gravity@gmail.com>"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.13"
+adalflow = "^1.1.0"
+
+[tool.poetry.group.dev.dependencies]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
