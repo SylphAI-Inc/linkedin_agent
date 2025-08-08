@@ -1,0 +1,6 @@
+SEARCH_INPUT = 'input[placeholder*="Search" i], input[aria-label*="Search" i]'
+PEOPLE_TAB = 'button[aria-label*="People" i], a[href*="/search/results/people/"]'
+SEARCH_RESULTS_CARDS = 'div.reusable-search__result-container, li.reusable-search__result-container'
+PROFILE_NAME = 'main h1, .pv-text-details__left-panel h1'
+PROFILE_HEADLINE = '.text-body-medium.break-words, [data-test-id*="headline"]'
+LOCATION_TEXT_CANDIDATES = 'li, span'

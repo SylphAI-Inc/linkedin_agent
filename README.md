@@ -26,6 +26,57 @@ poetry install
 poetry shell
 ```
 
+### Start Chrome with CDP
+
+You can use our embedded launcher (vendor stub) or start Chrome yourself.
+
+Option A: managed launcher
+
+```bash
+python vendor/claude_web/browser.py start
+```
+
+Option B: manual
+
+```bash
+google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug
+```
+
+### Run the LinkedIn agent
+
+```bash
+python runner/run_linkedin_agent.py \
+	--query "full stack" \
+	--location "San Francisco Bay Area" \
+	--limit 5
+```
+
+Then load environment variables from `.env` at project root. See `.env` for defaults like CHROME_CDP_PORT and OPENAI settings.
+
+## ▶️ Run Chrome (CDP) and the Agent
+
+This repo vendors a minimal stub of claude-web under `vendor/claude_web`. For real browser control, swap in the actual project; the stub prints simulated actions for development.
+
+1) Start Chrome with remote debugging (managed):
+
+```bash
+python vendor/claude_web/browser.py start
+```
+
+Or manually:
+
+```bash
+google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug
+```
+
+2) Run the agent end-to-end:
+
+```bash
+python -m runner.run_linkedin_agent --query "full stack" --location "San Francisco Bay Area" --limit 5
+```
+
+The default WebTool here is a dry-run CDP stub; it logs go/click/type/js. Replace `vendor/claude_web` with the real implementation to drive Chrome.
+
 ## 🏗️ Building Agents
 
 This project follows AdalFlow's new Agent/Runner pattern. To learn how to build agents:
