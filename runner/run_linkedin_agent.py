@@ -1,7 +1,7 @@
 import argparse
 import os
 import time
-from src.linkedin_agent import LinkedInAgent
+from agents.linkedin_agent import LinkedInAgent
 from config import load_env
 
 

@@ -13,6 +13,14 @@ except Exception:
 load_dotenv()
 
 
+def load_env() -> bool:
+    """Compatibility helper for callers expecting load_env()."""
+    try:
+        return bool(load_dotenv())
+    except Exception:
+        return False
+
+
 @dataclass
 class ModelConfig:
     provider: str = os.getenv("LLM_PROVIDER", "openai")
