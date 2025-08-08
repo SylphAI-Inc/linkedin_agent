@@ -193,23 +193,66 @@ class CandidateScorer:
                 # Try to manually parse from raw response if DataClass parser failed
                 if hasattr(response, 'raw_response') and response.raw_response:
                     try:
-                        # Extract text from OpenAI response
-                        if hasattr(response.raw_response, 'output') and response.raw_response.output:
-                            text_content = response.raw_response.output[0].content[0].text
+                        # The raw_response is a string representation, need to parse differently
+                        # Check if we can extract directly from the generator response
+                        text_content = None
+                        
+                        # Method 1: Check if raw_response contains the actual Response object string
+                        if isinstance(response.raw_response, str) and 'text=' in response.raw_response:
+                            import re
+                            # Try multiple patterns to extract text content
+                            text_patterns = [
+                                r"text='([^']*)'",
+                                r'text="([^"]*)"',
+                                r"text=([^,)]*)",
+                            ]
+                            
+                            for pattern in text_patterns:
+                                text_match = re.search(pattern, response.raw_response)
+                                if text_match:
+                                    text_content = text_match.group(1)
+                                    break
+                                
+                        # Method 2: If raw_response is the actual object (not string), use original method
+                        elif hasattr(response.raw_response, 'output') and response.raw_response.output:
+                            # Get the text from the response output message
+                            output_msg = response.raw_response.output[0]
+                            if hasattr(output_msg, 'content') and output_msg.content:
+                                text_content = output_msg.content[0].text
+                        
+                        if text_content:
+                            # Handle escaped newlines in text content
+                            text_content = text_content.replace('\\n', '\n').replace('\\t', '\t')
                             
                             # Extract JSON from the text (remove markdown code blocks)
                             import re
-                            json_match = re.search(r'```json\s*(\{.*?\})\s*```', text_content, re.DOTALL)
+                            json_str = None
+                            
+                            # Pattern 1: JSON in markdown code blocks (multi-line) - greedy match
+                            json_match = re.search(r'```(?:json)?\s*(\{.*\})\s*```', text_content, re.DOTALL | re.MULTILINE)
                             if json_match:
                                 json_str = json_match.group(1)
+                            else:
+                                # Pattern 2: Look for complete JSON object with overall_score
+                                json_match = re.search(r'(\{[^{}]*"overall_score"[^{}]*\})', text_content, re.DOTALL)
+                                if json_match:
+                                    json_str = json_match.group(1)
+                                else:
+                                    # Pattern 3: More flexible JSON extraction
+                                    json_match = re.search(r'(\{.*?"candidate_name".*?\})', text_content, re.DOTALL)
+                                    if json_match:
+                                        json_str = json_match.group(1)
+                                    else:
+                                        print(f"No JSON found in response text: {text_content[:200]}...")
+                                        json_str = None
+                                    
+                            if json_str:
                                 score_dict = json.loads(json_str)
                                 
                                 # Convert to CandidateScore object
                                 score = CandidateScore.from_dict(score_dict)
                                 print(f"Manual parsing successful: {score.overall_score:.1f}/100 ({score.recommendation})")
                                 return score
-                            else:
-                                print(f"No JSON found in response text")
                         
                     except Exception as parse_error:
                         print(f"Manual parsing failed: {parse_error}")
@@ -309,8 +352,15 @@ class CandidateScorer:
         return "\n".join(report)
 
 
-# Create global scorer instance
-_scorer = CandidateScorer()
+# Global scorer instance (created on demand)
+_scorer = None
+
+def get_global_scorer():
+    """Get or create global scorer instance"""
+    global _scorer
+    if _scorer is None:
+        _scorer = CandidateScorer()
+    return _scorer
 
 
 def score_candidate_against_job(candidate_data: dict, job_requirements_data: dict) -> dict:
@@ -320,7 +370,7 @@ def score_candidate_against_job(candidate_data: dict, job_requirements_data: dic
         candidate = LinkedInProfile.from_dict(candidate_data)
         job_req = JobRequirements.from_dict(job_requirements_data)
         
-        score = _scorer.score_candidate(candidate, job_req)
+        score = get_global_scorer().score_candidate(candidate, job_req)
         return score.to_dict() if score else {"error": "Scoring failed"}
         
     except Exception as e:
@@ -334,7 +384,7 @@ def score_multiple_candidates_for_job(candidates_data: list, job_requirements_da
         candidates = [LinkedInProfile.from_dict(c) for c in candidates_data]
         job_req = JobRequirements.from_dict(job_requirements_data)
         
-        scores = _scorer.score_multiple_candidates(candidates, job_req)
+        scores = get_global_scorer().score_multiple_candidates(candidates, job_req)
         
         return {
             "scores": [s.to_dict() for s in scores],

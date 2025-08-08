@@ -452,13 +452,20 @@ class ProfileExtractor:
         return profile
 
 
-# Create global extractor instance
-_extractor = ProfileExtractor()
+# Global extractor instance (created on demand)
+_extractor = None
+
+def get_global_extractor():
+    """Get or create global extractor instance"""
+    global _extractor
+    if _extractor is None:
+        _extractor = ProfileExtractor()
+    return _extractor
 
 
 def extract_complete_profile(profile_url: str) -> dict:
     """Extract complete LinkedIn profile - function tool wrapper"""
-    profile = _extractor.extract_complete_profile(profile_url)
+    profile = get_global_extractor().extract_complete_profile(profile_url)
     if profile:
         return profile.to_dict()
     else:
@@ -467,11 +474,11 @@ def extract_complete_profile(profile_url: str) -> dict:
 
 def extract_current_profile() -> dict:
     """Extract profile from current page - function tool wrapper"""
-    raw_data = _extractor.extract_raw_profile_data()
+    raw_data = get_global_extractor().extract_raw_profile_data()
     if raw_data:
-        profile = _extractor.parse_with_ai(raw_data)
+        profile = get_global_extractor().parse_with_ai(raw_data)
         if not profile:
-            profile = _extractor.fallback_parse(raw_data)
+            profile = get_global_extractor().fallback_parse(raw_data)
         return profile.to_dict()
     else:
         return {"error": "Failed to extract current profile"}

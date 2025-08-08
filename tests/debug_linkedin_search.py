@@ -17,6 +17,12 @@ from vendor.claude_web.tools.web_tool import WebTool
 def main():
     load_env()
     cdp = CDPConfig() 
+    
+    # Auto-start Chrome CDP
+    if not cdp.ensure_chrome_running():
+        print("Failed to start Chrome CDP")
+        return
+    
     os.environ["CHROME_CDP_PORT"] = str(cdp.port)
     os.environ["HEADLESS_MODE"] = "true"
     

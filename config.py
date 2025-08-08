@@ -69,6 +69,39 @@ class CDPConfig:
     port: int = field(default_factory=_pick_cdp_port)
     headless: bool = os.getenv("HEADLESS_MODE", "false").lower() == "true"
     user_data_dir: str = os.getenv("USER_DATA_DIR", "./chrome_data")
+    
+    def ensure_chrome_running(self):
+        """Ensure Chrome CDP is running"""
+        import subprocess
+        import time
+        import requests
+        
+        try:
+            # Test if CDP is already running
+            requests.get(f"http://localhost:{self.port}/json/version", timeout=2)
+            return True
+        except:
+            # Start Chrome with CDP
+            subprocess.Popen([
+                "chromium-browser",
+                f"--remote-debugging-port={self.port}",
+                f"--user-data-dir=./chrome_data-{self.port}",
+                "--no-first-run",
+                "--no-default-browser-check", 
+                "--disable-web-security",
+                "--disable-features=VizDisplayCompositor",
+                "--remote-allow-origins=*"
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            # Wait for startup
+            for _ in range(10):
+                try:
+                    requests.get(f"http://localhost:{self.port}/json/version", timeout=2)
+                    time.sleep(1)  # Extra wait for stability
+                    return True
+                except:
+                    time.sleep(1)
+            return False
 
 
 def get_model_kwargs(provider: Optional[str] = None):
