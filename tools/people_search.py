@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Any
 from urllib.parse import quote_plus
 
 from adalflow.core.func_tool import FunctionTool
@@ -18,16 +18,36 @@ def _js_click_first(sel: str) -> bool:
     return bool(run_js(code))
 
 
-def search_people(query: str, location: str = "", limit: int = 10) -> List[Dict]:
-    """Navigate LinkedIn people search and return lightweight result cards (name, subtitle, url)."""
+def search_people(query: str, location: str = "", limit: int = 10) -> Dict[str, Any]:
+    """Navigate LinkedIn people search and return lightweight result cards (name, subtitle, url).
+
+    Returns a structured payload to help the agent reason:
+      { "count": int, "results": [{ name, subtitle, url }] }
+    """
     q = (query + (f" {location}" if location else "")).strip()
     url = f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(q)}"
     nav_go(url)
     # Wait for modern search containers
-    nav_wait("li.reusable-search__result-container, div.reusable-search__result-container, .search-results-container", 10)
-    # Prefer People tab when present
+    nav_wait("li.reusable-search__result-container, div.reusable-search__result-container, .search-results-container", 12)
+    # Prefer People tab when present (best-effort)
     _js_click_first(PEOPLE_TAB)
-    nav_wait("li.reusable-search__result-container, div.reusable-search__result-container", 10)
+    nav_wait("li.reusable-search__result-container, div.reusable-search__result-container", 12)
+
+    # Poll for non-empty results, with light scrolling to trigger lazy load
+    code_count = """
+    (() => {
+      const nodes = document.querySelectorAll('li.reusable-search__result-container, div.reusable-search__result-container');
+      return nodes ? nodes.length : 0;
+    })()
+    """
+    tries = 0
+    count = int(run_js(code_count) or 0)
+    while count == 0 and tries < 20:
+        # small scroll to nudge rendering
+        run_js("window.scrollBy(0, 500);")
+        nav_wait("li.reusable-search__result-container, div.reusable-search__result-container", 1.0)
+        count = int(run_js(code_count) or 0)
+        tries += 1
 
     code_collect = f"""
     (() => {{
@@ -44,7 +64,12 @@ def search_people(query: str, location: str = "", limit: int = 10) -> List[Dict]
       }}).filter(x => x.url);
     }})()
     """
-    return run_js(code_collect) or []
+    results = run_js(code_collect) or []
+    # Normalize and structure output to help the planner
+    if not isinstance(results, list):
+        results = []
+    payload = {"count": len(results), "results": results}
+    return payload
 
 
 SearchPeopleTool = FunctionTool(fn=search_people)
