@@ -10,6 +10,8 @@ from tools.web_nav import GoTool, ClickTool, TypeTool, KeyTool, JsTool, WaitTool
 from tools.extract_profile import ExtractProfileTool
 from tools.people_search import SearchPeopleTool
 from tools.linkedin_auth import CheckAuthTool, NavigateLinkedInTool, PromptLoginTool
+from tools.profile_extractor import ExtractCompleteProfileTool, ExtractCurrentProfileTool
+from tools.candidate_scorer import ScoreCandidateTool, ScoreMultipleCandidatesTool
 
 
 class LinkedInAgent:
@@ -47,8 +49,14 @@ class LinkedInAgent:
                 CheckAuthTool,
                 NavigateLinkedInTool, 
                 PromptLoginTool,
-                ExtractProfileTool,
+                # Profile extraction tools
+                ExtractProfileTool,  # Legacy basic extraction
+                ExtractCompleteProfileTool,  # New comprehensive extraction  
+                ExtractCurrentProfileTool,  # Extract from current page
+                # Search and scoring tools
                 SearchPeopleTool,
+                ScoreCandidateTool,  # AI-powered candidate scoring
+                ScoreMultipleCandidatesTool,  # Batch scoring
             ]
 
         # Initialize Agent and Runner

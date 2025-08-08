@@ -85,7 +85,7 @@ def prompt_for_login() -> str:
         return "User is already authenticated on LinkedIn"
     
     instructions = [
-        "⚠️  LinkedIn authentication required",
+        "️  LinkedIn authentication required",
         "Please manually sign in to LinkedIn:",
         "1. Open https://www.linkedin.com in your browser",
         "2. Sign in with your LinkedIn credentials", 
