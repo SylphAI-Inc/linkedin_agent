@@ -8,6 +8,7 @@ from adalflow.core.func_tool import FunctionTool
 from config import AgentConfig, get_model_kwargs
 from tools.web_nav import GoTool, ClickTool, TypeTool, KeyTool, JsTool, WaitTool
 from tools.extract_profile import ExtractProfileTool
+from tools.people_search import SearchPeopleTool
 
 
 class LinkedInAgent:
@@ -41,6 +42,7 @@ class LinkedInAgent:
                 JsTool,
                 WaitTool,
                 ExtractProfileTool,
+                SearchPeopleTool,
             ]
 
         # Initialize Agent and Runner
@@ -55,10 +57,11 @@ class LinkedInAgent:
         self.runner = Runner(agent=self.agent, max_steps=max_steps)
 
     def call(self, query: str, context: Optional[Dict[str, Any]] = None) -> Any:
-        return self.runner.call(agent=self.agent, query=query, context=context or {})
+        # Installed AdalFlow Runner expects prompt_kwargs only; context not supported in this version
+        return self.runner.call(prompt_kwargs={"input_str": query})
 
     async def acall(self, query: str, context: Optional[Dict[str, Any]] = None) -> Any:
-        return await self.runner.acall(agent=self.agent, query=query, context=context or {})
+        return await self.runner.acall(prompt_kwargs={"input_str": query})
 
     def add_tool(self, tool: FunctionTool) -> None:
         self.agent.tools.append(tool)

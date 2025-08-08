@@ -1,5 +1,5 @@
 from adalflow.core.func_tool import FunctionTool
-from .web_nav import JsTool
+from .web_nav import js as run_js
 
 PROFILE_JS = r"""
 (() => {
@@ -22,7 +22,7 @@ PROFILE_JS = r"""
 
 
 def extract_profile() -> dict:
-    return JsTool.call(PROFILE_JS)
+  return run_js(PROFILE_JS) or {}
 
 
-ExtractProfileTool = FunctionTool(extract_profile, name="extract_profile")
+ExtractProfileTool = FunctionTool(fn=extract_profile)

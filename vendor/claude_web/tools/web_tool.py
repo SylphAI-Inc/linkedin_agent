@@ -24,23 +24,63 @@ class WebTool:
         self.ws = None
         self.msg_id = 0
 
+    def _get_ws_url(self) -> str:
+        """Pick a valid page target's WebSocket URL; create one if none exist."""
+        resp = requests.get(f"http://localhost:{self.port}/json", timeout=1.0)
+        tabs = resp.json() if resp.ok else []
+        # Prefer a 'page' target with a debugger URL
+        for t in tabs:
+            if t.get("type") == "page" and t.get("webSocketDebuggerUrl"):
+                return t["webSocketDebuggerUrl"]
+        # Fallback: last resort, pick any with ws url
+        for t in tabs:
+            if t.get("webSocketDebuggerUrl"):
+                return t["webSocketDebuggerUrl"]
+        # As a last resort, try to open a new blank tab then retry
+        try:
+            requests.get(f"http://localhost:{self.port}/json/new?", timeout=1.0)
+            time.sleep(0.2)
+            tabs = requests.get(f"http://localhost:{self.port}/json", timeout=1.0).json()
+            for t in tabs:
+                if t.get("webSocketDebuggerUrl"):
+                    return t["webSocketDebuggerUrl"]
+        except Exception:
+            pass
+        raise RuntimeError(f"No CDP tabs found at port {self.port}. Start Chrome with --remote-debugging-port.")
+
     def connect(self):
-        tabs = requests.get(f"http://localhost:{self.port}/json").json()
-        if not tabs:
-            raise RuntimeError(f"No CDP tabs found at port {self.port}. Start Chrome with --remote-debugging-port.")
-        self.ws = websocket.create_connection(tabs[0]["webSocketDebuggerUrl"])
+        ws_url = self._get_ws_url()
+        # Align with Chrome origin expectations; no Origin header by default
+        self.ws = websocket.create_connection(ws_url, timeout=3)
         self.cmd("Page.enable")
         self.cmd("DOM.enable")
         self.cmd("Runtime.enable")
 
     def cmd(self, method: str, params: Optional[dict] = None):
+        # Reconnect lazily if needed
+        if self.ws is None:
+            self.connect()
         self.msg_id += 1
         msg = {"id": self.msg_id, "method": method, "params": params or {}}
-        self.ws.send(json.dumps(msg))
+        payload = json.dumps(msg)
+        tried_reconnect = False
         while True:
-            resp = json.loads(self.ws.recv())
-            if resp.get("id") == self.msg_id:
-                return resp
+            try:
+                self.ws.send(payload)
+                while True:
+                    resp = json.loads(self.ws.recv())
+                    if resp.get("id") == self.msg_id:
+                        return resp
+            except Exception as e:
+                if tried_reconnect:
+                    raise RuntimeError(f"CDP command failed for {method}: {e}")
+                # attempt reconnect once
+                tried_reconnect = True
+                try:
+                    self.connect()
+                except Exception as re:
+                    # bubble up if cannot reconnect
+                    raise RuntimeError(f"CDP reconnect failed for {method}: {re}")
 
     def _sleep(self):
         time.sleep(WebConfig().min_delay)
@@ -79,20 +119,30 @@ class WebTool:
         self.cmd("Input.dispatchKeyEvent", {"type": "keyDown", "key": key_name})
 
     def js(self, code: str) -> Any:
+        """Evaluate JS and return structured result when possible.
+        Uses returnByValue to get JSON-serializable objects directly.
+        """
         try:
-            result = self.cmd("Runtime.evaluate", {"expression": code})
+            result = self.cmd(
+                "Runtime.evaluate",
+                {"expression": code, "returnByValue": True},
+            )
             if "error" in result:
                 return None
-            resp = result.get("result", {})
-            if "exceptionDetails" in result:
+            # Chrome CDP returns { result: { result: { type, value? } }, exceptionDetails? }
+            if result.get("exceptionDetails"):
                 return None
-            js_result = resp.get("result", {})
-            rtype = js_result.get("type", "undefined")
+            inner = result.get("result", {}).get("result", {})
+            if "value" in inner:
+                return inner["value"]
+            # Fallbacks for primitives without value
+            rtype = inner.get("type", "undefined")
             if rtype in {"string", "number", "boolean"}:
-                return js_result.get("value")
-            if rtype == "object" and js_result.get("subtype") == "null":
+                return inner.get("value")
+            # null subtype
+            if rtype == "object" and inner.get("subtype") == "null":
                 return None
-            return js_result.get("value", js_result.get("description"))
+            return inner.get("description")
         except Exception:
             return None
 
@@ -121,3 +171,4 @@ class WebTool:
     def close(self):
         if self.ws:
             self.ws.close()
+            self.ws = None

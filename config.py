@@ -1,21 +1,27 @@
 import os
-from dataclasses import dataclass
+import socket
+from dataclasses import dataclass, field
 from typing import Optional
+from pathlib import Path
 
 try:
     from dotenv import load_dotenv  # type: ignore
-except Exception:
-    def load_dotenv(*args, **kwargs):
+except Exception:  # pragma: no cover - optional dependency
+    def load_dotenv(*args, **kwargs):  # type: ignore
         return False
 
 
-# Load .env at import time
-load_dotenv()
-
-
 def load_env() -> bool:
-    """Compatibility helper for callers expecting load_env()."""
+    """Load environment variables from the project root .env file if present.
+
+    Returns True if a .env file was found and loaded; otherwise False.
+    """
     try:
+        root = Path(__file__).resolve().parent
+        dotenv_path = root / ".env"
+        if dotenv_path.exists():
+            return bool(load_dotenv(dotenv_path))
+        # Fallback: attempt default resolution
         return bool(load_dotenv())
     except Exception:
         return False
@@ -33,9 +39,34 @@ class AgentConfig:
     max_steps: int = int(os.getenv("AGENT_MAX_STEPS", "20"))
 
 
+def _is_port_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.2)
+        try:
+            return s.connect_ex(("127.0.0.1", port)) == 0
+        except Exception:
+            return False
+
+
+def _pick_cdp_port() -> int:
+    # Respect explicit env if set
+    env_port = os.getenv("CHROME_CDP_PORT")
+    if env_port and env_port.isdigit():
+        try:
+            return int(env_port)
+        except Exception:
+            pass
+    # Find a free port in a small range
+    for p in range(9222, 9233):
+        if not _is_port_in_use(p):
+            return p
+    # Fallback
+    return 9233
+
+
 @dataclass
 class CDPConfig:
-    port: int = int(os.getenv("CHROME_CDP_PORT", "9222"))
+    port: int = field(default_factory=_pick_cdp_port)
     headless: bool = os.getenv("HEADLESS_MODE", "false").lower() == "true"
     user_data_dir: str = os.getenv("USER_DATA_DIR", "./chrome_data")
 
@@ -46,21 +77,6 @@ def get_model_kwargs(provider: Optional[str] = None):
         return {"model": ModelConfig().model, "temperature": ModelConfig().temperature}
     # Extend for other providers if needed
     return {"temperature": ModelConfig().temperature}
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-
-
-def load_env():
-    # Load from project root .env
-    root = Path(__file__).resolve().parent
-    dotenv_path = root / ".env"
-    if dotenv_path.exists():
-        load_dotenv(dotenv_path)
-    else:
-        # Fallback: load from CWD if running elsewhere
-        load_dotenv()
-
 
 def get(key: str, default: str | None = None) -> str | None:
     return os.getenv(key, default)

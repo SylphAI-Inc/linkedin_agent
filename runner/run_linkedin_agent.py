@@ -1,8 +1,18 @@
 import argparse
 import os
+import sys
 import time
-from src.linkedin_agent import LinkedInAgent
-from config import load_env
+from pathlib import Path
+
+# Ensure repo root is on sys.path when running as a script
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from src.linkedin_agent import LinkedInAgent  # noqa: E402
+from config import load_env, CDPConfig  # noqa: E402
+from vendor.claude_web.browser import start as start_browser  # noqa: E402
+import requests  # type: ignore  # noqa: E402
 
 
 def main():
@@ -14,8 +24,27 @@ def main():
     parser.add_argument("--approve-outreach", dest="approve_outreach", action="store_true")
     args = parser.parse_args()
 
-    # Ensure Chrome is running with CDP
-    print("Ensure Chrome is started with CDP on port", os.getenv("CHROME_CDP_PORT", "9222"))
+    # Ensure Chrome is running with CDP on the configured port; propagate to env for all components
+    cdp = CDPConfig()
+    os.environ["CHROME_CDP_PORT"] = str(cdp.port)
+    # Attach if DevTools is already up; otherwise launch a new Chrome instance
+    def _cdp_alive() -> bool:
+        try:
+            r = requests.get(f"http://localhost:{cdp.port}/json", timeout=0.5)
+            return bool(r.ok)
+        except Exception:
+            return False
+
+    if _cdp_alive():
+        print(f"Attaching to existing Chrome on port {cdp.port}")
+    else:
+        print("Starting Chrome with CDP on port", cdp.port)
+        start_browser()
+        # Wait for DevTools endpoint to be ready
+        for _ in range(50):
+            if _cdp_alive():
+                break
+            time.sleep(0.2)
 
     agent = LinkedInAgent()
     prompt = (
@@ -24,9 +53,10 @@ def main():
         f"Keep actions small and verify URL/location changes."
     )
 
-    res = agent.call(query=prompt, context={"approve_outreach": args.approve_outreach})
+    res = agent.call(query=prompt)
     print("Run complete. Steps:")
-    for i, s in enumerate(res.steps, 1):
+    steps = getattr(res, "step_history", getattr(res, "steps", []))
+    for i, s in enumerate(steps, 1):
         print(i, getattr(s, 'thought', getattr(s, 'action', 'step')))
         if getattr(s, 'tool_name', None):
             print("  ->", s.tool_name, getattr(s, 'tool_args', {}), "=>", (str(getattr(s, 'tool_result', None))[:120] if getattr(s, 'tool_result', None) is not None else None))

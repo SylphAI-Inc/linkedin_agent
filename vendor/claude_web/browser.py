@@ -49,10 +49,17 @@ def start() -> None:
     cfg = BrowserConfig()
     chrome_cmd = _which_chrome()
 
+    # Use a unique profile per port to avoid "Opening in existing browser session" which ignores new flags
+    user_dir = f"{cfg.user_data_dir}-{cfg.port}"
+    os.makedirs(user_dir, exist_ok=True)
+
     args = [
         chrome_cmd,
         f"--remote-debugging-port={cfg.port}",
-        f"--user-data-dir={cfg.user_data_dir}",
+        f"--user-data-dir={user_dir}",
+        "--remote-allow-origins=*",
+        "--no-first-run",
+        "--no-default-browser-check",
     ]
     if cfg.headless:
         args += [

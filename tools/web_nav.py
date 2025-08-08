@@ -7,10 +7,16 @@ _web = None
 
 def _ensure():
     global _web
-    if _web:
-        return _web
-    _web = WebTool(port=CDPConfig().port)
-    _web.connect()
+    if _web is None:
+        _web = WebTool(port=CDPConfig().port)
+    # (Re)connect if ws not ready
+    try:
+        if _web.ws is None:
+            _web.connect()
+    except Exception:
+        # Force new instance on failure
+        _web = WebTool(port=CDPConfig().port)
+        _web.connect()
     return _web
 
 
@@ -48,9 +54,9 @@ def wait(selector: str, timeout: float = 10.0) -> bool:
     return w.wait(selector, timeout)
 
 
-GoTool = FunctionTool(go, name="go")
-ClickTool = FunctionTool(click, name="click")
-TypeTool = FunctionTool(type_, name="type")
-KeyTool = FunctionTool(key, name="key")
-JsTool = FunctionTool(js, name="js")
-WaitTool = FunctionTool(wait, name="wait")
+GoTool = FunctionTool(fn=go)
+ClickTool = FunctionTool(fn=click)
+TypeTool = FunctionTool(fn=type_)
+KeyTool = FunctionTool(fn=key)
+JsTool = FunctionTool(fn=js)
+WaitTool = FunctionTool(fn=wait)
