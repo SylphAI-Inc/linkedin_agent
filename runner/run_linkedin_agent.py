@@ -1,7 +1,7 @@
 import argparse
 import os
 import time
-from agents.linkedin_agent import build_agent
+from src.linkedin_agent import LinkedInAgent
 from config import load_env
 
 
@@ -17,20 +17,19 @@ def main():
     # Ensure Chrome is running with CDP
     print("Ensure Chrome is started with CDP on port", os.getenv("CHROME_CDP_PORT", "9222"))
 
-    agent, runner = build_agent()
-
+    agent = LinkedInAgent()
     prompt = (
         f"Open LinkedIn, search for people with '{args.query}' in {args.location}. "
         f"Collect up to {args.limit} candidates. For each, open the profile and call extract_profile. "
         f"Keep actions small and verify URL/location changes."
     )
 
-    res = runner.call(agent=agent, query=prompt, context={"approve_outreach": args.approve_outreach})
+    res = agent.call(query=prompt, context={"approve_outreach": args.approve_outreach})
     print("Run complete. Steps:")
     for i, s in enumerate(res.steps, 1):
-        print(i, s.thought)
-        if s.tool_name:
-            print("  ->", s.tool_name, s.tool_args, "=>", (str(s.tool_result)[:120] if s.tool_result is not None else None))
+        print(i, getattr(s, 'thought', getattr(s, 'action', 'step')))
+        if getattr(s, 'tool_name', None):
+            print("  ->", s.tool_name, getattr(s, 'tool_args', {}), "=>", (str(getattr(s, 'tool_result', None))[:120] if getattr(s, 'tool_result', None) is not None else None))
         time.sleep(0.1)
 
 

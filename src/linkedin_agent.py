@@ -1,0 +1,64 @@
+from typing import Any, Dict, List, Optional
+
+from adalflow.components.agent.agent import Agent
+from adalflow.components.agent.runner import Runner
+from adalflow.components.model_client.openai_client import OpenAIClient
+from adalflow.core.func_tool import FunctionTool
+
+from config import AgentConfig, get_model_kwargs
+from tools.web_nav import GoTool, ClickTool, TypeTool, KeyTool, JsTool, WaitTool
+from tools.extract_profile import ExtractProfileTool
+
+
+class LinkedInAgent:
+    """
+    LinkedIn agent following the same design as src/dummy_agent.py:
+    - Encapsulates an AdalFlow Agent and Runner
+    - Exposes call()/acall() and add_tool()
+    - Provides sensible default tools (CDP nav + extract_profile)
+    """
+
+    def __init__(
+        self,
+        model_client: Optional[OpenAIClient] = None,
+        model_kwargs: Optional[Dict[str, Any]] = None,
+        tools: Optional[List[Any]] = None,
+        max_steps: Optional[int] = None,
+        **kwargs,
+    ) -> None:
+        # Defaults
+        model_client = model_client or OpenAIClient()
+        model_kwargs = model_kwargs or get_model_kwargs()
+        max_steps = max_steps or AgentConfig().max_steps
+
+        # Prepare default tools if none provided
+        if tools is None:
+            tools = [
+                GoTool,
+                ClickTool,
+                TypeTool,
+                KeyTool,
+                JsTool,
+                WaitTool,
+                ExtractProfileTool,
+            ]
+
+        # Initialize Agent and Runner
+        self.agent = Agent(
+            name="LinkedInRecruiter",
+            tools=tools,
+            model_client=model_client,
+            model_kwargs=model_kwargs,
+            max_steps=max_steps,
+            **kwargs,
+        )
+        self.runner = Runner(agent=self.agent, max_steps=max_steps)
+
+    def call(self, query: str, context: Optional[Dict[str, Any]] = None) -> Any:
+        return self.runner.call(agent=self.agent, query=query, context=context or {})
+
+    async def acall(self, query: str, context: Optional[Dict[str, Any]] = None) -> Any:
+        return await self.runner.acall(agent=self.agent, query=query, context=context or {})
+
+    def add_tool(self, tool: FunctionTool) -> None:
+        self.agent.tools.append(tool)
