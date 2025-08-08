@@ -105,6 +105,63 @@ Feel free to use any approach you think is best.
 1. initial project scoping and come with a plan
 2. executing the plan 
 
+## ✅ MVP roadmap & status
+
+This checklist tracks progress toward a practical MVP that sources candidates from LinkedIn using AdalFlow + CDP.
+
+Core scaffolding
+- [x] Repo structure (agents, tools, runner, pipeline, vendor/claude_web)
+- [x] Config loader with .env (python-dotenv)
+- [x] pyproject dependencies (adalflow, requests, websocket-client)
+- [x] Package __init__.py files
+
+CDP web control (claude-web style)
+- [x] Minimal browser launcher stub (vendor/claude_web/browser.py)
+- [x] CDP WebTool primitives: connect, go, click, fill, key, js, wait, screenshot
+- [x] FunctionTool wrappers: Go/Click/Type/Key/Js/Wait
+- [ ] Robust target selection (multi-tab) and retries
+- [ ] Upstream swap: use agi-inc/claude-web as submodule for production
+
+AdalFlow integration
+- [x] LinkedInAgent class (DummyAgent-style encapsulation with Agent + Runner)
+- [x] CLI runner (runner/run_linkedin_agent.py)
+- [x] OpenAIClient wiring and model kwargs from env
+- [ ] PermissionManager for human-in-the-loop sensitive actions
+- [ ] Tracing integration for steps and tool calls
+
+LinkedIn flows
+- [x] Profile extractor tool (tools/extract_profile.py) using web.js()
+- [ ] People search flow toolset (navigate, query, filters, pagination)
+- [ ] Stable selectors + fallbacks (tools/linkedin_selectors.py to expand)
+- [ ] Pagination control with verification and cooldowns
+- [ ] Session/login handling (reuse user_data_dir, detect login state)
+
+Anti-detection hygiene
+- [x] Delays configurable via .env (MIN_DELAY_SECONDS, MAX_DELAY_SECONDS)
+- [ ] Jittered delays tuned by action type (pagination vs typing)
+- [ ] Step budgets and per-session limits enforced centrally
+
+Pipeline
+- [x] Scoring stub (pipeline/scoring.py)
+- [x] Outreach stub (pipeline/outreach.py)
+- [x] Storage stub (pipeline/storage.py)
+- [ ] Structured experience/education parsing and normalization
+- [ ] Export CSV/JSON lines with schema; optional Postgres storage
+
+Ops & DX
+- [x] README quick start with CDP run steps
+- [ ] Tests: unit (tools/utils) and a dry-run integration
+- [ ] CI (lint/test) and basic health checks
+- [ ] Dockerfile and make targets (optional)
+
+Security & reliability
+- [x] .env in .gitignore (do not commit secrets)
+- [ ] Rotate any keys that were shared in local files
+- [ ] Error handling for timeouts, navigation failures, missing selectors
+- [ ] Basic telemetry/logging (INFO/DEBUG) with log file config
+
+If you want something prioritized next, comment under the relevant section.
+
 ## 🔗 Resources
 
 - **AdalFlow Agent Tutorial**: https://adalflow.sylph.ai/new_tutorials/agents_runner.html
