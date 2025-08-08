@@ -53,14 +53,79 @@ def main():
         f"Keep actions small and verify URL/location changes."
     )
 
-    res = agent.call(query=prompt)
-    print("Run complete. Steps:")
-    steps = getattr(res, "step_history", getattr(res, "steps", []))
-    for i, s in enumerate(steps, 1):
-        print(i, getattr(s, 'thought', getattr(s, 'action', 'step')))
-        if getattr(s, 'tool_name', None):
-            print("  ->", s.tool_name, getattr(s, 'tool_args', {}), "=>", (str(getattr(s, 'tool_result', None))[:120] if getattr(s, 'tool_result', None) is not None else None))
-        time.sleep(0.1)
+    try:
+        res = agent.call(query=prompt)
+        print("Run complete. Steps:")
+        steps = getattr(res, "step_history", getattr(res, "steps", []))
+        
+        if not steps:
+            print("No steps recorded - agent may have encountered parsing issues")
+            print(f"Result: {res}")
+            # Try to run the core functionality directly as fallback
+            print("\n🔄 Falling back to direct search functionality...")
+            from tools.people_search import search_people
+            from tools.extract_profile import extract_profile
+            from tools.web_nav import go
+            
+            # Direct search
+            search_results = search_people(args.query, args.location, args.limit)
+            print(f"✅ Direct search found: {search_results}")
+            
+            if search_results.get("count", 0) > 0:
+                candidates = []
+                for i, candidate in enumerate(search_results.get("results", [])[:args.limit]):
+                    print(f"🔍 Extracting profile {i+1}: {candidate['name']}")
+                    go(candidate["url"])
+                    profile_data = extract_profile()
+                    candidates.append({"search_info": candidate, "profile_details": profile_data})
+                
+                print(f"\n✅ FALLBACK RESULTS - Found {len(candidates)} candidates:")
+                for i, candidate in enumerate(candidates, 1):
+                    search_info = candidate["search_info"]
+                    profile_info = candidate["profile_details"]
+                    print(f"\n--- Candidate {i} ---")
+                    print(f"Name: {profile_info.get('name', search_info.get('name', 'N/A'))}")
+                    print(f"Title: {profile_info.get('headline', search_info.get('subtitle', 'N/A'))}")
+                    print(f"LinkedIn URL: {search_info.get('url', 'N/A')}")
+        else:
+            for i, s in enumerate(steps, 1):
+                print(i, getattr(s, 'thought', getattr(s, 'action', 'step')))
+                if getattr(s, 'tool_name', None):
+                    print("  ->", s.tool_name, getattr(s, 'tool_args', {}), "=>", (str(getattr(s, 'tool_result', None))[:120] if getattr(s, 'tool_result', None) is not None else None))
+                time.sleep(0.1)
+    except Exception as e:
+        print(f"❌ Agent execution failed: {e}")
+        print("\n🔄 Falling back to direct functionality...")
+        
+        # Fallback to direct execution
+        from tools.people_search import search_people
+        from tools.extract_profile import extract_profile
+        from tools.web_nav import go
+        
+        try:
+            search_results = search_people(args.query, args.location, args.limit)
+            print(f"✅ Direct search found: {search_results}")
+            
+            if search_results.get("count", 0) > 0:
+                candidates = []
+                for i, candidate in enumerate(search_results.get("results", [])[:args.limit]):
+                    print(f"🔍 Extracting profile {i+1}: {candidate['name']}")
+                    go(candidate["url"])
+                    profile_data = extract_profile()
+                    candidates.append({"search_info": candidate, "profile_details": profile_data})
+                
+                print(f"\n✅ FALLBACK RESULTS - Found {len(candidates)} candidates:")
+                for i, candidate in enumerate(candidates, 1):
+                    search_info = candidate["search_info"]
+                    profile_info = candidate["profile_details"]
+                    print(f"\n--- Candidate {i} ---")
+                    print(f"Name: {profile_info.get('name', search_info.get('name', 'N/A'))}")
+                    print(f"Title: {profile_info.get('headline', search_info.get('subtitle', 'N/A'))}")
+                    print(f"LinkedIn URL: {search_info.get('url', 'N/A')}")
+            else:
+                print("❌ No candidates found")
+        except Exception as fallback_error:
+            print(f"❌ Fallback also failed: {fallback_error}")
 
 
 if __name__ == "__main__":
