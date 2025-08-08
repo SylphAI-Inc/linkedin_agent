@@ -5,8 +5,8 @@ import os
 import time
 from pathlib import Path
 
-# Setup path
-REPO_ROOT = Path(__file__).resolve().parent
+# Setup path - go up one level from tests/ to repo root
+REPO_ROOT = Path(__file__).resolve().parent.parent
 import sys
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
