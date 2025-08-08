@@ -9,6 +9,7 @@ from config import AgentConfig, get_model_kwargs
 from tools.web_nav import GoTool, ClickTool, TypeTool, KeyTool, JsTool, WaitTool
 from tools.extract_profile import ExtractProfileTool
 from tools.people_search import SearchPeopleTool
+from tools.linkedin_auth import CheckAuthTool, NavigateLinkedInTool, PromptLoginTool
 
 
 class LinkedInAgent:
@@ -35,12 +36,17 @@ class LinkedInAgent:
         # Prepare default tools if none provided
         if tools is None:
             tools = [
+                # Navigation tools
                 GoTool,
                 ClickTool,
                 TypeTool,
                 KeyTool,
                 JsTool,
                 WaitTool,
+                # LinkedIn-specific tools
+                CheckAuthTool,
+                NavigateLinkedInTool, 
+                PromptLoginTool,
                 ExtractProfileTool,
                 SearchPeopleTool,
             ]

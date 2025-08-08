@@ -27,41 +27,75 @@ def search_people(query: str, location: str = "", limit: int = 10) -> Dict[str, 
     q = (query + (f" {location}" if location else "")).strip()
     url = f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(q)}"
     nav_go(url)
-    # Wait for modern search containers
-    nav_wait("li.reusable-search__result-container, div.reusable-search__result-container, .search-results-container", 12)
+    # Wait for search results 
+    nav_wait(".search-results-container li, .search-no-results", 12)
+    
     # Prefer People tab when present (best-effort)
     _js_click_first(PEOPLE_TAB)
-    nav_wait("li.reusable-search__result-container, div.reusable-search__result-container", 12)
+    nav_wait(".search-results-container li", 5)
 
-    # Poll for non-empty results, with light scrolling to trigger lazy load
+    # Check for results using the correct selector
     code_count = """
     (() => {
-      const nodes = document.querySelectorAll('li.reusable-search__result-container, div.reusable-search__result-container');
+      const nodes = document.querySelectorAll('.search-results-container li');
       return nodes ? nodes.length : 0;
     })()
     """
-    tries = 0
     count = int(run_js(code_count) or 0)
-    while count == 0 and tries < 20:
-        # small scroll to nudge rendering
-        run_js("window.scrollBy(0, 500);")
-        nav_wait("li.reusable-search__result-container, div.reusable-search__result-container", 1.0)
+    
+    # Light scrolling to ensure all results are loaded
+    if count > 0:
+        run_js("window.scrollBy(0, 800);")
+        nav_wait(".search-results-container li", 2)
         count = int(run_js(code_count) or 0)
-        tries += 1
+
+    if count == 0:
+        return {"count": 0, "results": [], "error": "No search results found"}
 
     code_collect = f"""
     (() => {{
-      const containers = Array.from(document.querySelectorAll('li.reusable-search__result-container, div.reusable-search__result-container'));
-      const cards = containers.slice(0, {limit});
-      return cards.map(c => {{
-        const link = c.querySelector('a.app-aware-link[href*="/in/"]') || c.querySelector('a[href*="/in/"]');
-        const nameEl = c.querySelector('span[aria-hidden="true"], span[dir]');
-        const subtitleEl = c.querySelector('.entity-result__primary-subtitle, .entity-result__secondary-subtitle, .t-14.t-normal');
-        const name = (nameEl?.textContent||'').trim();
-        const subtitle = (subtitleEl?.textContent||'').trim();
-        const url = link ? link.href : null;
-        return {{ name, subtitle, url }};
-      }}).filter(x => x.url);
+      const containers = Array.from(document.querySelectorAll('.search-results-container li')).slice(0, {limit});
+      
+      return containers.map(li => {{
+        const profileLink = li.querySelector('a[href*="/in/"]');
+        const lines = li.textContent.split('\\n').map(l => l.trim()).filter(l => l && l !== 'Status is offline');
+        
+        // Find name using LinkedIn's pattern
+        let name = null;
+        for (const line of lines) {{
+          if ((line.includes("'s profile") || line.includes("'s profile") || line.includes("s profile")) && 
+              line.includes("View ") && !line.includes('•') && !line.includes('degree')) {{
+            const viewIndex = line.indexOf('View ');
+            if (viewIndex > 0) {{
+              const beforeView = line.substring(0, viewIndex).trim();
+              if (beforeView.length > 2 && beforeView.length < 50) {{
+                name = beforeView;
+                break;
+              }}
+            }}
+          }}
+        }}
+        
+        // Find subtitle - usually appears after connection info
+        let subtitle = null;
+        let foundConnectionLine = false;
+        for (const line of lines) {{
+          if (line.includes('degree connection')) {{
+            foundConnectionLine = true;
+            continue;
+          }}
+          if (foundConnectionLine && line && !line.includes('degree') && !line.includes('View ') && !line.includes('Status is') && line.length > 5) {{
+            subtitle = line;
+            break;
+          }}
+        }}
+        
+        return {{
+          name: name || null,
+          subtitle: subtitle || null, 
+          url: profileLink?.href || null
+        }};
+      }}).filter(x => x.url && x.name);
     }})()
     """
     results = run_js(code_collect) or []
