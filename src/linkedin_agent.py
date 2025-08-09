@@ -50,7 +50,6 @@ class LinkedInAgent:
                 NavigateLinkedInTool, 
                 PromptLoginTool,
                 # Profile extraction tools
-                ExtractProfileTool,  # Legacy basic extraction
                 ExtractCompleteProfileTool,  # New comprehensive extraction  
                 ExtractCurrentProfileTool,  # Extract from current page
                 # Search and scoring tools

@@ -331,32 +331,23 @@ PROFILE_EXTRACTION_DOM_JS = r"""
   const scrapeLanguages = (section) => {
     expandSeeMore(section);
     const blocks = qa('[data-view-name="profile-component-entity"]', section);
-    const out = [];
     const norm = s => (s || '').replace(/\s+/g, ' ').trim();
 
-    for (const item of blocks) {
-      const name =
+    return blocks.map(item => ({
+      name:
         norm(q('.t-bold span[aria-hidden="true"]', item)?.textContent) ||
-        'Unknown Language';
-
-      // Proficiency lives in caption wrapper aria-hidden
-      const proficiency =
-        norm(q('.pvs-entity__caption-wrapper[aria-hidden="true"]', item)?.textContent) || '';
-
-      out.push({ name, proficiency });
-    }
-
-    // Optional: capture “see all” link if you want to follow to the detail page
-    const seeAll =
-      q('#navigation-index-see-all-languages', section)?.getAttribute('href') || '';
-    return { items: out, see_all_url: seeAll };
+        'Unknown Language',
+      proficiency:
+        norm(q('.pvs-entity__caption-wrapper[aria-hidden="true"]', item)?.textContent) || ''
+    }));
   };
 
   // usage:
   const languagesSection = document.querySelector('div#languages.pv-profile-card__anchor')
     ?.closest('section.artdeco-card');
-  const languages = languagesSection ? scrapeLanguages(languagesSection) : { items: [], see_all_url: '' };
 
+  const languages = languagesSection ? scrapeLanguages(languagesSection) : [];
+  
   return {
     name,
     headline,
