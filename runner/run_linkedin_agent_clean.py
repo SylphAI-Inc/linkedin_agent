@@ -61,10 +61,6 @@ def parse_arguments():
                        help="Maximum number of candidates to extract")
     
     # Optional features
-    parser.add_argument("--role-type", 
-                       choices=['software_engineer', 'product_manager', 'sales_executive', 
-                               'marketing_manager', 'data_scientist', 'designer'],
-                       help="Specific role type for enhanced targeting")
     parser.add_argument("--enhanced-prompting", action="store_true", default=True,
                        help="Use role-specific enhanced prompting (default: True)")
     parser.add_argument("--basic-prompting", dest="enhanced_prompting", action="store_false",
@@ -90,7 +86,6 @@ def main():
         query=args.query,
         location=args.location,
         limit=args.limit,
-        role_type=args.role_type,
         enhanced_prompting=args.enhanced_prompting,
         streaming=args.streaming
     )
@@ -138,7 +133,7 @@ def main():
     candidates = []
     
     with trace(workflow_name="LinkedIn-Recruitment"):
-        candidates = workflow.execute_search_workflow(progress_tracker)
+        candidates = workflow.execute_search_workflow(strategy, progress_tracker)
     
     # 6. Save and display results
     print("\n" + "="*60)
@@ -146,23 +141,29 @@ def main():
     print("="*60)
     
     if candidates:
-        try:
-            save_info = workflow.save_results(candidates)
+        save_info = workflow.save_results(candidates)  # Error handling now built-in
+        
+        # Check if save was successful
+        if "Error:" not in str(save_info.get('json_file', '')):
             print(f"💾 RESULTS SAVED:")
             print(f"📄 Detailed JSON: {save_info['json_file']}")
             print(f"📝 Summary Report: {save_info['txt_file']}")
-            print(f"👥 Total Candidates: {save_info['candidates_count']}")
-            
-            # Display summary
-            print(f"\n🎉 RECRUITMENT SUMMARY:")
-            print(f"   Query: {args.query}")
-            print(f"   Location: {args.location}")
-            print(f"   Found: {len(candidates)}/{args.limit} candidates")
-            print(f"   Strategy: {'AI-Enhanced' if not strategy.get('fallback_strategy') else 'Fallback'}")
-            
-            # Show top candidates
-            print(f"\n📋 TOP CANDIDATES:")
-            for i, candidate in enumerate(candidates[:3], 1):
+        else:
+            print(f"⚠️  Could not save results to files")
+        
+        print(f"👥 Total Candidates: {save_info['candidates_count']}")
+        
+        # Display summary
+        print(f"\n🎉 RECRUITMENT SUMMARY:")
+        print(f"   Query: {args.query}")
+        print(f"   Location: {args.location}")
+        print(f"   Found: {len(candidates)}/{args.limit} candidates")
+        print(f"   Strategy: {'AI-Enhanced' if not strategy.get('fallback_strategy') else 'Fallback'}")
+        
+        # Show top candidates with better error handling
+        print(f"\n📋 TOP CANDIDATES:")
+        for i, candidate in enumerate(candidates[:3], 1):
+            try:
                 profile = candidate.get("profile_details", {})
                 name = profile.get("name", "Unknown")
                 title = profile.get("headline", "No title")
@@ -172,15 +173,19 @@ def main():
                 print(f"   {i}. {name}")
                 print(f"      Title: {title}")
                 print(f"      Completeness: {completeness}%")
-            
-        except Exception as save_error:
-            print(f"⚠️  Failed to save results: {save_error}")
-            print(f"📊 Found {len(candidates)} candidates (unsaved)")
+            except Exception as display_error:
+                print(f"   {i}. [Error displaying candidate: {display_error}]")
+        
     else:
         print("❌ No candidates found")
         print("💡 Try adjusting your search criteria or location")
+        print("💡 Check your LinkedIn authentication or network connection")
     
     print(f"\n✅ Recruitment workflow completed!")
+    if candidates:
+        print(f"📊 Final result: Successfully processed {len(candidates)} candidates")
+    else:
+        print(f"📊 Final result: No candidates found - consider adjusting search parameters")
 
 
 if __name__ == "__main__":

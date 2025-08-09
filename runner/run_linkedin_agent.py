@@ -47,7 +47,6 @@ def save_results(candidates, search_params, output_dir="results"):
             "query": search_params["query"],
             "location": search_params["location"], 
             "limit": search_params["limit"],
-            "role_type": search_params.get("role_type"),
             "enhanced_prompting": search_params.get("enhanced_prompting", False),
             "streaming_enabled": search_params.get("streaming", False),
             "total_found": len(candidates)
@@ -66,7 +65,6 @@ def save_results(candidates, search_params, output_dir="results"):
         f.write(f"=" * 50 + "\n\n")
         f.write(f"Search Query: {search_params['query']}\n")
         f.write(f"Location: {search_params['location']}\n")
-        f.write(f"Role Type: {search_params.get('role_type', 'auto-detected').replace('_', ' ').title()}\n")
         f.write(f"Enhanced Prompting: {'Yes' if search_params.get('enhanced_prompting') else 'No'}\n")
         f.write(f"Streaming Feedback: {'Yes' if search_params.get('streaming') else 'No'}\n")
         f.write(f"Limit: {search_params['limit']}\n")
@@ -123,8 +121,6 @@ def main():
                        help="Geographic location for search")
     parser.add_argument("--limit", type=int, default=int(os.getenv("DEFAULT_SEARCH_LIMIT", "10")),
                        help="Maximum number of candidates to extract")
-    parser.add_argument("--role-type", choices=list(RolePromptBuilder.ROLE_CONTEXTS.keys()), 
-                       help="Specific role type for enhanced targeting (auto-detected if not specified)")
     parser.add_argument("--enhanced-prompting", action="store_true", default=True,
                        help="Use role-specific enhanced prompting (default: True)")
     parser.add_argument("--basic-prompting", dest="enhanced_prompting", action="store_false",
@@ -163,20 +159,28 @@ def main():
     # Build enhanced or basic prompt based on user preference
     if args.enhanced_prompting:
         print(f"Using enhanced role-specific prompting for: {args.query}")
+        # Create a fallback strategy for the enhanced prompt
+        fallback_strategy = {
+            "fallback_strategy": True,
+            "headline_analysis": {
+                "target_job_titles": [args.query],
+                "alternative_titles": [],
+                "tech_stack_signals": []
+            },
+            "profile_evaluation_context": {
+                "focus_areas": ["experience", "skills"],
+                "ideal_candidate_description": f"Experienced {args.query}"
+            }
+        }
+        
         prompt = RolePromptBuilder.build_enhanced_prompt(
             base_query=args.query,
             location=args.location,
             limit=args.limit,
-            role_type=args.role_type
+            strategy=fallback_strategy
         )
         
-        # Show detected role type
-        detected_role = args.role_type or RolePromptBuilder.detect_role_type(args.query)
-        print(f"Target role type: {detected_role.replace('_', ' ').title()}")
-        
-        # Show role-specific focus
-        role_instructions = RolePromptBuilder.get_role_specific_instructions(detected_role)
-        print(f"Role-specific focus:\n{role_instructions}")
+        print(f"Using fallback strategy for role: {args.query}")
     else:
         print("Using basic prompting")
         prompt = (
@@ -189,7 +193,6 @@ def main():
         "query": args.query,
         "location": args.location,
         "limit": args.limit,
-        "role_type": args.role_type or RolePromptBuilder.detect_role_type(args.query),
         "enhanced_prompting": args.enhanced_prompting,
         "streaming": args.streaming
     }
