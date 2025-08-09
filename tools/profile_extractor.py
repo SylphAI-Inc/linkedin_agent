@@ -20,6 +20,22 @@ from .web_nav import js as run_js, go, wait
 from config import get_model_kwargs
 
 
+# AI Prompt for parsing raw profile data
+PROFILE_ANALYSIS_PROMPT = r"""
+You are a LinkedIn profile data parser. Parse the following raw LinkedIn profile data into a structured format.
+
+Raw Profile Data:
+{raw_data}
+
+Instructions:
+- Extract all available information accurately
+- Structure the data according to the provided format
+- If information is missing or unclear, use appropriate defaults
+- Ensure all fields are properly typed and formatted
+
+{format_instructions}
+"""
+
 # Comprehensive JavaScript for deep profile extraction
 COMPREHENSIVE_PROFILE_JS = r"""
 (() => {
@@ -645,5 +661,5 @@ def extract_current_profile() -> dict:
 
 
 # Function tools for agent
-ExtractCompleteProfileTool = FunctionTool(fn=extract_complete_profile)
+# ExtractCompleteProfileTool = FunctionTool(fn=extract_complete_profile)
 ExtractCurrentProfileTool = FunctionTool(fn=extract_current_profile)

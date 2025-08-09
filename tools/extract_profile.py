@@ -384,4 +384,4 @@ PROFILE_JS = r"""
 def extract_profile() -> dict:
   return run_js(PROFILE_JS) or {}
 
-ExtractProfileTool = FunctionTool(fn=extract_profile)
+ExtractCompleteProfileTool = FunctionTool(fn=extract_profile)
