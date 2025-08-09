@@ -15,6 +15,7 @@ from src.linkedin_agent import LinkedInAgent  # noqa: E402
 from config import load_env, CDPConfig  # noqa: E402
 from vendor.claude_web.browser import start as start_browser  # noqa: E402
 from utils.role_prompts import RolePromptBuilder  # noqa: E402
+from utils.streaming_handler import AgentProgressTracker  # noqa: E402
 import requests  # type: ignore  # noqa: E402
 
 
@@ -39,6 +40,7 @@ def save_results(candidates, search_params, output_dir="results"):
             "limit": search_params["limit"],
             "role_type": search_params.get("role_type"),
             "enhanced_prompting": search_params.get("enhanced_prompting", False),
+            "streaming_enabled": search_params.get("streaming", False),
             "total_found": len(candidates)
         },
         "candidates": candidates
@@ -57,6 +59,7 @@ def save_results(candidates, search_params, output_dir="results"):
         f.write(f"Location: {search_params['location']}\n")
         f.write(f"Role Type: {search_params.get('role_type', 'auto-detected').replace('_', ' ').title()}\n")
         f.write(f"Enhanced Prompting: {'Yes' if search_params.get('enhanced_prompting') else 'No'}\n")
+        f.write(f"Streaming Feedback: {'Yes' if search_params.get('streaming') else 'No'}\n")
         f.write(f"Limit: {search_params['limit']}\n")
         f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Results Found: {len(candidates)}\n\n")
@@ -116,6 +119,10 @@ def main():
                        help="Use role-specific enhanced prompting (default: True)")
     parser.add_argument("--basic-prompting", dest="enhanced_prompting", action="store_false",
                        help="Use basic prompting instead of enhanced")
+    parser.add_argument("--streaming", action="store_true", default=True,
+                       help="Enable real-time streaming feedback (default: True)")
+    parser.add_argument("--no-streaming", dest="streaming", action="store_false",
+                       help="Disable streaming feedback")
     parser.add_argument("--approve-outreach", dest="approve_outreach", action="store_true")
     args = parser.parse_args()
 
@@ -173,18 +180,36 @@ def main():
         "location": args.location,
         "limit": args.limit,
         "role_type": args.role_type or RolePromptBuilder.detect_role_type(args.query),
-        "enhanced_prompting": args.enhanced_prompting
+        "enhanced_prompting": args.enhanced_prompting,
+        "streaming": args.streaming
     }
+    
+    # Initialize progress tracking
+    if args.streaming:
+        progress_tracker = AgentProgressTracker(
+            query=args.query,
+            location=args.location, 
+            limit=args.limit,
+            enable_streaming=True
+        )
+        progress_tracker.start_workflow()
+    else:
+        progress_tracker = None
     
     candidates = []
     
     try:
         res = agent.call(query=prompt)
-        print("Run complete. Steps:")
-        steps = getattr(res, "step_history", getattr(res, "steps", []))
         
-        if not steps:
-            print("No steps recorded - agent may have encountered parsing issues")
+        if progress_tracker:
+            progress_tracker.log_completion(candidates)
+        
+        if not progress_tracker:  # Only show detailed steps if not streaming
+            print("Run complete. Steps:")
+            steps = getattr(res, "step_history", getattr(res, "steps", []))
+            
+            if not steps:
+                print("No steps recorded - agent may have encountered parsing issues")
             print(f"Result: {res}")
             
             # Check if there's profile data in the final answer
