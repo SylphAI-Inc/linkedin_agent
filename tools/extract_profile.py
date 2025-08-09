@@ -8,7 +8,6 @@ PROFILE_JS = r"""
     for (let i = 0; i < maxAttempts; i++) {
       const sections = document.querySelectorAll('section.artdeco-card');
       if (sections.length > 5) return true;
-      // Synchronous wait - not ideal but necessary for extraction
     }
     return false;
   };
@@ -17,111 +16,215 @@ PROFILE_JS = r"""
   
   const grab = sel => document.querySelector(sel)?.textContent?.trim() || null;
   
-  // Extract content from specific sections more intelligently
-  const extractSectionContent = (sectionKeyword, fallbackSelector = null) => {
-    // Find all sections
-    const sections = Array.from(document.querySelectorAll('section.artdeco-card'));
+  // Helper to clean duplicated text (e.g., "TextText" -> "Text")
+  const cleanDuplicatedText = (text) => {
+    if (!text) return text;
     
-    // Find section with the keyword in its text
-    const targetSection = sections.find(section => {
-      const text = section.textContent.toLowerCase();
-      return text.includes(sectionKeyword.toLowerCase()) && 
-             !text.includes('loading') && 
-             !text.includes('see more results');
-    });
+    // First handle exact duplications like "TextText" -> "Text"
+    const half = Math.floor(text.length / 2);
+    const firstHalf = text.substring(0, half);
+    const secondHalf = text.substring(half);
     
-    if (!targetSection) return null;
-    
-    // Try multiple strategies to extract clean content
-    const strategies = [
-      // Strategy 1: Look for content after the heading
-      () => {
-        const heading = targetSection.querySelector('h2, h3, .pvs-header__title');
-        if (heading) {
-          const content = [];
-          let sibling = heading.parentElement?.nextElementSibling;
-          while (sibling && content.length < 5) {
-            const text = sibling.textContent?.trim();
-            if (text && text.length > 20 && !text.includes('Show all')) {
-              content.push(text);
-            }
-            sibling = sibling.nextElementSibling;
-          }
-          return content.join('\\n\\n').substring(0, 1000);
-        }
-        return null;
-      },
-      
-      // Strategy 2: Look for paragraph-like content
-      () => {
-        const textElements = Array.from(targetSection.querySelectorAll('span, div, p'))
-          .filter(el => {
-            const text = el.textContent?.trim() || '';
-            return text.length > 50 && 
-                   text.length < 2000 &&
-                   !el.querySelector('button, a, input') &&
-                   !text.includes('Show all') &&
-                   !text.toLowerCase().includes(sectionKeyword.toLowerCase());
-          })
-          .sort((a, b) => b.textContent.length - a.textContent.length);
-        
-        return textElements[0]?.textContent?.trim()?.substring(0, 1000) || null;
-      },
-      
-      // Strategy 3: Fallback to section text but clean it
-      () => {
-        const text = targetSection.textContent.trim();
-        const lines = text.split('\\n').filter(line => {
-          const clean = line.trim();
-          return clean.length > 10 && 
-                 !clean.toLowerCase().includes(sectionKeyword.toLowerCase()) &&
-                 !clean.includes('Show all') &&
-                 !clean.includes('see more') &&
-                 !clean.includes('•') &&
-                 !/^[0-9]+$/.test(clean);
-        });
-        return lines.slice(0, 3).join(' ').substring(0, 1000);
-      }
-    ];
-    
-    for (let strategy of strategies) {
-      try {
-        const result = strategy();
-        if (result && result.length > 30) {
-          return result;
-        }
-      } catch (e) {
-        continue;
-      }
+    if (firstHalf === secondHalf && firstHalf.length > 5) {
+      text = firstHalf;
     }
     
-    return null;
+    // Then handle word-level duplications
+    const words = text.split(' ');
+    const cleanWords = [];
+    let prevWord = '';
+    
+    for (let word of words) {
+      if (word !== prevWord) {
+        cleanWords.push(word);
+      }
+      prevWord = word;
+    }
+    
+    return cleanWords.join(' ').trim();
   };
   
-  // Extract basic info using proven selectors from DOM analysis
+  // Find sections by their visually hidden labels
+  const findSectionByLabel = (labelText) => {
+    const sections = Array.from(document.querySelectorAll('section.artdeco-card'));
+    return sections.find(section => {
+      const hiddenLabel = section.querySelector('.visually-hidden');
+      return hiddenLabel && hiddenLabel.textContent.toLowerCase().includes(labelText.toLowerCase());
+    });
+  };
+  
+  // Extract basic info
   const name = grab('h1, .ph5 h1');
   const headline = grab('.text-body-medium.break-words, .ph5 .text-body-medium');
-  
-  // Extract section content using improved method
-  const about = extractSectionContent('about');
-  const experience = extractSectionContent('experience'); 
-  const education = extractSectionContent('education');
-  
-  // Extract location more precisely
   const location = grab('.text-body-small.inline.t-black--light.break-words') ||
                   Array.from(document.querySelectorAll('span, div'))
                     .map(x => x.textContent?.trim())
                     .find(t => t && /^[A-Za-z\s,]+,\s*[A-Za-z\s]+$/.test(t) && t.length < 100) || 
                   null;
   
-  return { 
-    name, 
-    headline, 
-    about, 
-    experience, 
-    education, 
-    location, 
-    url: window.location.href 
+  // Extract About section
+  let about = null;
+  const aboutSection = findSectionByLabel('about');
+  if (aboutSection) {
+    const aboutContentDiv = aboutSection.querySelector('.display-flex.ph5.pv3, .display-flex.full-w');
+    if (aboutContentDiv) {
+      const aboutSpan = aboutContentDiv.querySelector('span');
+      about = aboutSpan ? aboutSpan.textContent.trim() : aboutContentDiv.textContent.trim();
+    }
+    
+    if (!about) {
+      const textElements = Array.from(aboutSection.querySelectorAll('span, div'))
+        .filter(el => {
+          const text = el.textContent?.trim() || '';
+          return text.length > 100 && 
+                 !el.querySelector('button') &&
+                 !text.includes('Show all') &&
+                 !text.includes('About');
+        })
+        .sort((a, b) => b.textContent.length - a.textContent.length);
+      
+      about = textElements[0] ? textElements[0].textContent.trim() : null;
+    }
+  }
+  
+  // Extract Experience as array
+  let experiences = [];
+  const experienceSection = findSectionByLabel('experience');
+  if (experienceSection) {
+    const experienceItems = Array.from(experienceSection.querySelectorAll('li.artdeco-list__item'))
+      .filter(item => {
+        const text = item.textContent?.trim() || '';
+        return text.length > 100 && !text.includes('Show all experiences') && !text.includes('skills');
+      });
+    
+    experienceItems.forEach((item) => {
+      try {
+        const flexDiv = item.querySelector('.display-flex.flex-row.justify-space-between');
+        if (flexDiv) {
+          const lines = flexDiv.textContent.trim().split('\n').map(l => l.trim()).filter(l => l);
+          
+          if (lines.length >= 2) {
+            // Clean title (remove duplication)
+            const titleLine = lines[0];
+            const title = cleanDuplicatedText(titleLine);
+            
+            // Clean company info
+            const companyLine = lines.find(line => line.includes('·')) || lines[1];
+            const company = cleanDuplicatedText(companyLine ? companyLine.split('·')[0].trim() : 'Unknown');
+            
+            // Find duration
+            const timeLine = lines.find(line => 
+              line.includes('to') || line.includes('Present') || line.match(/\d{4}/) ||
+              line.includes('yr') || line.includes('mo')
+            ) || '';
+            
+            // Find location 
+            const locationLine = lines.find(line => 
+              line.includes('United States') || line.includes('California') ||
+              line.includes('Bay Area') || (line.includes(',') && !line.includes('·'))
+            ) || '';
+            
+            // Get description
+            const descLines = lines.filter(line => 
+              line !== titleLine && line !== companyLine && 
+              line !== timeLine && line !== locationLine && line.length > 20
+            );
+            
+            experiences.push({
+              title: title,
+              company: company,
+              duration: cleanDuplicatedText(timeLine),
+              location: cleanDuplicatedText(locationLine),
+              description: descLines.join(' ').substring(0, 300) || 'No description provided'
+            });
+          }
+        }
+      } catch (e) {
+        // Skip problematic entries
+      }
+    });
+  }
+  
+  // Extract Education as array
+  let education = [];
+  const educationSection = findSectionByLabel('education');
+  if (educationSection) {
+    const educationItems = Array.from(educationSection.querySelectorAll('li.artdeco-list__item'))
+      .filter(item => {
+        const text = item.textContent?.trim() || '';
+        return text.length > 50 && !text.includes('skills') && !text.includes('Show all');
+      });
+    
+    educationItems.forEach((item) => {
+      try {
+        const schoolLink = item.querySelector('a[href*="/company/"]');
+        let school = schoolLink ? schoolLink.textContent.trim() : '';
+        
+        const lines = item.textContent.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        
+        if (!school && lines.length > 0) {
+          school = lines.find(line => 
+            line.includes('University') || line.includes('College') || 
+            line.includes('School') || line.includes('Institute')
+          ) || lines[0];
+        }
+        
+        const degreeInfo = lines.find(line => 
+          line.includes('Bachelor') || line.includes('Master') || 
+          line.includes('BS,') || line.includes('MS,') || 
+          line.includes('PhD') || line.includes('Diploma')
+        ) || '';
+        
+        const yearInfo = lines.find(line => line.match(/\b20\d{2}\b/)) || '';
+        
+        education.push({
+          school: cleanDuplicatedText(school),
+          degree: cleanDuplicatedText(degreeInfo),
+          year: cleanDuplicatedText(yearInfo)
+        });
+      } catch (e) {
+        // Skip problematic entries
+      }
+    });
+  }
+  
+  // Extract Skills 
+  let skills = [];
+  const skillsSection = findSectionByLabel('skills');
+  if (skillsSection) {
+    const skillElements = Array.from(skillsSection.querySelectorAll('.visually-hidden'))
+      .map(el => el.textContent.trim())
+      .filter(skill => 
+        skill.length > 1 && skill.length < 50 && 
+        !skill.includes('Skills') && !skill.includes('endorsement') &&
+        !skill.includes('Endorsed') && skill !== '1' &&
+        !skill.includes('Show all') && !skill.includes('Endorse')
+      );
+    
+    skills = [...new Set(skillElements)].slice(0, 15);
+  }
+  
+  return {
+    name,
+    headline,
+    about,
+    experiences,
+    education,
+    skills,
+    location,
+    url: window.location.href,
+    extraction_timestamp: new Date().toISOString(),
+    data_quality: {
+      has_name: !!name,
+      has_headline: !!headline,
+      has_about: !!about && about.length > 50,
+      experience_count: experiences.length,
+      education_count: education.length,
+      skills_count: skills.length,
+      has_location: !!location,
+      total_score: [!!name, !!headline, !!about && about.length > 50, 
+                   experiences.length > 0, education.length > 0, !!location].filter(x => x).length
+    }
   };
 })()
 """
