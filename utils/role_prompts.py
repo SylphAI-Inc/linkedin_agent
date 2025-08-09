@@ -148,7 +148,7 @@ class RolePromptBuilder:
             f"3. For each of the top {limit} candidates found:",
             f"   - Review their profile preview for relevance",
             f"   - Click to open their full profile",
-            f"   - Extract comprehensive profile data using extract_profile",
+            f"   - Extract comprehensive profile data using extract_complete_profile",
             f"   - Verify the data quality before moving to next candidate",
             f"4. Focus on candidates with:",
             f"   - Clear professional headlines matching the role",

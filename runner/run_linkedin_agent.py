@@ -181,7 +181,7 @@ def main():
         print("Using basic prompting")
         prompt = (
             f"Open LinkedIn, search for people with '{args.query}' in {args.location}. "
-            f"Collect up to {args.limit} candidates. For each, open the profile and call extract_profile. "
+            f"Collect up to {args.limit} candidates. For each, open the profile and call extract_complete_profile. "
             f"Keep actions small and verify URL/location changes."
         )
 
