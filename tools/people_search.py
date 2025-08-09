@@ -10,81 +10,6 @@ from adalflow.components.model_client import OpenAIClient
 from adalflow.components.output_parsers import JsonOutputParser
 from config import get_model_kwargs
 
-# AdalFlow prompt template for search strategy creation
-SEARCH_STRATEGY_PROMPT = r"""<ROLE>
-You are an expert LinkedIn recruitment strategist. Your task is to analyze a search query and create a comprehensive strategy for finding and evaluating candidates.
-</ROLE>
-
-<CONTEXT>
-LinkedIn search results provide limited information:
-- Candidate Name
-- Professional Headline (e.g., "Senior Software Engineer at Google | Python, React, AWS")  
-- Profile URL
-- Sometimes location
-
-Full profile extraction happens later with complete job history, education, skills, etc.
-</CONTEXT>
-
-<TASK>
-Create a search strategy for: "{{query}}" in {{location}}
-
-Break this down into:
-1. What to look for in headlines (limited search result info)
-2. How to evaluate full profiles when extracted
-3. Realistic quality standards
-</TASK>
-
-<OUTPUT_FORMAT>
-Return valid JSON with this exact structure:
-{
-  "headline_analysis": {
-    "target_job_titles": ["exact titles to match in headlines"],
-    "alternative_titles": ["similar/related titles"],
-    "seniority_keywords": ["words indicating experience level"],
-    "company_indicators": ["words suggesting good companies"],
-    "tech_stack_signals": ["technology keywords to look for"],
-    "role_relevance_keywords": ["must-have words for basic relevance"]
-  },
-  "search_filtering": {
-    "positive_headline_patterns": ["patterns that suggest quality"],
-    "negative_headline_patterns": ["patterns to avoid"],
-    "minimum_headline_score": 4.0,
-    "ideal_headline_score": 7.0
-  },
-  "profile_evaluation_context": {
-    "focus_areas": ["key areas to analyze in full profile"],
-    "quality_indicators": ["what makes a strong candidate"],
-    "experience_evaluation": ["how to assess work experience"],
-    "ideal_candidate_description": "detailed description of perfect match",
-    "deal_breakers": ["absolute red flags to avoid"]
-  },
-  "search_terms": ["optimized LinkedIn search keywords to try"]
-}
-</OUTPUT_FORMAT>
-
-<EXAMPLES>
-Query: "senior frontend developer" in "New York"
-Strategy would focus on:
-- Headlines containing "frontend", "front-end", "UI", "React", "Vue"
-- Seniority: "senior", "lead", "staff", "principal"
-- Companies: recognizable tech companies, well-funded startups
-- Profile evaluation: depth of frontend experience, modern frameworks, design collaboration
-
-Query: "product manager" in "San Francisco" 
-Strategy would focus on:
-- Headlines with "product manager", "PM", "product lead", "product owner"
-- Companies: tech companies, startups, B2B/B2C product companies
-- Profile evaluation: product launches, metrics impact, stakeholder management
-</EXAMPLES>
-
-<INSTRUCTIONS>
-- Be realistic about headline limitations - we only see 1-2 lines of text
-- Focus on achievable filtering based on minimal search result data
-- Provide comprehensive guidance for later full profile evaluation
-- Balance quality standards with market realities
-- Consider the specific role requirements and location market
-</INSTRUCTIONS>"""
-
 # AdalFlow prompt for profile evaluation with strategy context
 PROFILE_EVALUATION_PROMPT = r"""<ROLE>
 You are an expert recruiter specializing in candidate assessment. You evaluate LinkedIn profiles against specific role requirements and provide detailed recommendations.
@@ -173,20 +98,7 @@ def _js_click_first(sel: str) -> bool:
     return bool(run_js(code))
 
 # Initialize AdalFlow generators for strategy and evaluation
-_strategy_generator = None
 _evaluation_generator = None
-
-def get_strategy_generator():
-    """Get or create strategy generator"""
-    global _strategy_generator
-    if _strategy_generator is None:
-        _strategy_generator = Generator(
-            model_client=OpenAIClient(),
-            model_kwargs=get_model_kwargs(),
-            template=SEARCH_STRATEGY_PROMPT,
-            output_processors=JsonOutputParser()
-        )
-    return _strategy_generator
 
 def get_evaluation_generator():
     """Get or create evaluation generator"""  
@@ -199,55 +111,6 @@ def get_evaluation_generator():
             output_processors=JsonOutputParser()
         )
     return _evaluation_generator
-
-def create_search_strategy(query: str, location: str = "") -> Dict[str, Any]:
-    """Create comprehensive search strategy using AdalFlow"""
-    try:
-        generator = get_strategy_generator()
-        result = generator(prompt_kwargs={
-            "query": query,
-            "location": location or "Any Location"
-        })
-        
-        if hasattr(result, 'data') and result.data:
-            return result.data
-        else:
-            # Fallback strategy if LLM call fails
-            return create_fallback_strategy(query, location)
-            
-    except Exception as e:
-        print(f"Strategy creation failed: {e}")
-        return create_fallback_strategy(query, location)
-
-def create_fallback_strategy(query: str, location: str = "") -> Dict[str, Any]:
-    """Fallback strategy when LLM is unavailable"""
-    # Extract basic keywords from query
-    query_words = query.lower().split()
-    
-    return {
-        "headline_analysis": {
-            "target_job_titles": [query.lower()],
-            "alternative_titles": query_words,
-            "seniority_keywords": ["senior", "staff", "principal", "lead", "director"],
-            "company_indicators": ["@", "at", "inc", "corp", "ltd"],
-            "tech_stack_signals": ["python", "react", "java", "aws", "kubernetes"],
-            "role_relevance_keywords": query_words
-        },
-        "search_filtering": {
-            "positive_headline_patterns": ["senior", "lead", "experienced"],
-            "negative_headline_patterns": ["intern", "entry", "junior"],
-            "minimum_headline_score": 3.0,
-            "ideal_headline_score": 6.0
-        },
-        "profile_evaluation_context": {
-            "focus_areas": ["work experience", "technical skills", "career progression"],
-            "quality_indicators": ["relevant experience", "good companies", "skill progression"],
-            "experience_evaluation": ["role relevance", "company quality", "tenure"],
-            "ideal_candidate_description": f"Experienced {query} with relevant background",
-            "deal_breakers": ["completely irrelevant experience", "no relevant skills"]
-        },
-        "search_terms": [query, f"{query} {location}".strip()]
-    }
 
 def evaluate_headline_with_strategy(headline: str, strategy: Dict[str, Any]) -> Dict[str, Any]:
     """Evaluate candidate headline using strategy - no LLM needed"""

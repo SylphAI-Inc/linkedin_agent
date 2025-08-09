@@ -45,7 +45,6 @@ def save_recruitment_results(candidates: List[Dict[str, Any]],
         f.write(f"=" * 50 + "\n\n")
         f.write(f"Search Query: {search_params['query']}\n")
         f.write(f"Location: {search_params['location']}\n")
-        f.write(f"Role Type: {search_params.get('role_type', 'auto-detected').replace('_', ' ').title()}\n")
         f.write(f"Enhanced Prompting: {'Yes' if search_params.get('enhanced_prompting') else 'No'}\n")
         f.write(f"Strategy Used: {'Yes' if search_params.get('strategy_used') else 'No'}\n")
         f.write(f"Limit: {search_params['limit']}\n")

@@ -103,7 +103,7 @@ class StreamingHandler:
     def log_profile_extraction(self, candidate_name: str, extraction_success: bool, profile_data: Optional[Dict[str, Any]] = None):
         """Log profile extraction results"""
         details = {
-            "action": "extract_profile",
+            "action": "extract_complete_profile",
             "candidate_name": candidate_name,
             "extraction_success": extraction_success
         }

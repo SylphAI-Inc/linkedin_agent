@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 import json
 
-# from tools.people_search import create_search_strategy  # Not used in original working flow
+from tools.strategy_generator import StrategyGenerator
 from src.linkedin_agent import LinkedInAgent
 from utils.role_prompts import RolePromptBuilder
 
@@ -19,25 +19,36 @@ class LinkedInWorkflowManager:
         self.query = query
         self.location = location
         self.limit = limit
-        self.role_type = kwargs.get('role_type') or RolePromptBuilder.detect_role_type(query)
         self.enhanced_prompting = kwargs.get('enhanced_prompting', True)
         self.streaming = kwargs.get('streaming', True)
         
         # Initialize components
         self.agent = None
-        self.strategy = None
+        self.strategy_generator = StrategyGenerator()
+        self.strategy = {}
         self.results = []
         
     def create_recruitment_strategy(self) -> Dict[str, Any]:
         """Step 1: Create comprehensive search strategy (DISABLED - not in original flow)"""
         print(f"🎯 Skipping strategy creation - using original flow approach")
         print(f"📍 Location: {self.location}")
-        print(f"🎭 Role type: {self.role_type.replace('_', ' ').title()}")
         
-        # Use simple fallback strategy to avoid LLM calls that cause issues
-        self.strategy = self._create_fallback_strategy()
-        return self.strategy
-    
+        try:
+            self.strategy = self.strategy_generator.create_search_strategy(
+                query=self.query,
+                location=self.location
+            )
+            self.strategy = self.strategy.to_dict()
+            self.strategy['original_query'] = self.query
+            return self.strategy
+        except Exception as e:
+            print(f"⚠️  Failed to create strategy: {e}")
+            print("📊 Using fallback strategy instead")
+
+            # Use simple fallback strategy to avoid LLM calls that cause issues
+            self.strategy = self._create_fallback_strategy()
+            return self.strategy
+        
     def initialize_agent(self) -> LinkedInAgent:
         """Step 2: Initialize agent with strategy context"""
         print("🤖 Initializing LinkedIn agent with strategy context...")
@@ -53,10 +64,13 @@ class LinkedInWorkflowManager:
         
         return self.agent, prompt
     
-    def execute_search_workflow(self, progress_tracker=None) -> List[Dict[str, Any]]:
-        """Step 3: Execute the complete search workflow"""
+    def execute_search_workflow(self, strategy, progress_tracker=None) -> List[Dict[str, Any]]:
+        """Step 3: Execute the complete search workflow with robust error handling"""
         print(f"🔍 Starting recruitment workflow...")
         print(f"📊 Target: {self.limit} candidates")
+        exit(1)
+        
+        candidates = []
         
         try:
             agent, prompt = self.initialize_agent()
@@ -70,6 +84,16 @@ class LinkedInWorkflowManager:
             # Process results based on agent execution
             candidates = self._extract_candidates_from_result(result)
             
+            # If no candidates from step history, try extracting from final answer
+            if len(candidates) == 0:
+                print("🔍 No candidates from step history, checking final answer...")
+                candidates = self._extract_candidates_from_final_answer(result)
+            
+            # If still no candidates, try URL re-extraction approach
+            if len(candidates) == 0:
+                print("🔍 No candidates from final answer, trying URL re-extraction...")
+                candidates = self._retry_extraction_from_urls(result)
+            
             if progress_tracker:
                 progress_tracker.log_completion(candidates)
             
@@ -79,25 +103,47 @@ class LinkedInWorkflowManager:
             return candidates
             
         except Exception as e:
-            print(f"❌ Workflow failed: {e}")
+            print(f"❌ Agent workflow failed: {e}")
+            import traceback
+            print(f"📝 Error details: {traceback.format_exc()[:200]}...")
+            
             # Try fallback direct execution
-            return self._execute_fallback_workflow()
+            try:
+                print("🔄 Attempting fallback workflow...")
+                fallback_candidates = self._execute_fallback_workflow()
+                if fallback_candidates:
+                    return fallback_candidates
+            except Exception as fallback_error:
+                print(f"❌ Fallback workflow also failed: {fallback_error}")
+            
+            # Return any partial results we managed to extract
+            print(f"📊 Returning {len(candidates)} partial results")
+            return candidates
     
     def save_results(self, candidates: List[Dict[str, Any]], output_dir: str = "results") -> Dict[str, str]:
-        """Step 4: Save recruitment results"""
-        from runner.result_saver import save_recruitment_results
-        
-        search_params = {
-            "query": self.query,
-            "location": self.location,
-            "limit": self.limit,
-            "role_type": self.role_type,
-            "enhanced_prompting": self.enhanced_prompting,
-            "streaming": self.streaming,
-            "strategy_used": bool(self.strategy)
-        }
-        
-        return save_recruitment_results(candidates, search_params, output_dir)
+        """Step 4: Save recruitment results with error handling"""
+        try:
+            from runner.result_saver import save_recruitment_results
+            
+            search_params = {
+                "query": self.query,
+                "location": self.location,
+                "limit": self.limit,
+                "enhanced_prompting": self.enhanced_prompting,
+                "streaming": self.streaming,
+                "strategy_used": bool(self.strategy)
+            }
+            
+            return save_recruitment_results(candidates, search_params, output_dir)
+            
+        except Exception as e:
+            print(f"⚠️  Failed to save results: {e}")
+            print(f"📊 Found {len(candidates)} candidates (unsaved)")
+            return {
+                "json_file": "Error: Could not save",
+                "txt_file": "Error: Could not save",
+                "candidates_count": len(candidates)
+            }
     
     def _build_strategy_enhanced_prompt(self) -> str:
         """Build prompt enhanced with strategy context - simplified to match original"""
@@ -106,7 +152,7 @@ class LinkedInWorkflowManager:
             base_query=self.query,
             location=self.location,
             limit=self.limit,
-            role_type=self.role_type
+            strategy=self.strategy
         )
     
     def _build_basic_prompt(self) -> str:
@@ -230,6 +276,7 @@ class LinkedInWorkflowManager:
             from tools.people_search import search_people
             from tools.profile_extractor import extract_complete_profile
             from tools.web_nav import go
+            import time
             
             # Direct search
             search_results = search_people(self.query, self.location, self.limit)
@@ -237,10 +284,28 @@ class LinkedInWorkflowManager:
             if search_results.get("count", 0) > 0:
                 candidates = []
                 for i, candidate in enumerate(search_results.get("results", [])[:self.limit]):
-                    print(f"📝 Extracting profile {i+1}: {candidate['name']}")
-                    go(candidate["url"])
-                    profile_data = extract_complete_profile()
-                    candidates.append({"search_info": candidate, "profile_details": profile_data})
+                    try:
+                        print(f"📝 Extracting profile {i+1}: {candidate['name']}")
+                        
+                        # Add delay to avoid rate limiting
+                        if i > 0:
+                            time.sleep(1)
+                        
+                        go(candidate["url"])
+                        time.sleep(0.5)  # Wait for page load
+                        
+                        profile_data = extract_complete_profile()
+                        
+                        # Validate profile data
+                        if isinstance(profile_data, dict) and profile_data.get('name'):
+                            candidates.append({"search_info": candidate, "profile_details": profile_data})
+                            print(f"    ✅ Successfully extracted: {profile_data.get('name')}")
+                        else:
+                            print(f"    ⚠️  Invalid profile data for {candidate['name']} - skipping")
+                            
+                    except Exception as profile_error:
+                        print(f"    ❌ Failed to extract profile for {candidate['name']}: {profile_error}")
+                        continue  # Continue with next candidate
                 
                 return candidates
             else:
@@ -250,3 +315,135 @@ class LinkedInWorkflowManager:
         except Exception as e:
             print(f"❌ Fallback workflow also failed: {e}")
             return []
+    
+    def _extract_candidates_from_final_answer(self, result) -> List[Dict[str, Any]]:
+        """Extract candidates from agent's final answer when step history fails"""
+        candidates = []
+        
+        try:
+            # Try multiple ways to get the final answer
+            final_answer = None
+            if hasattr(result, 'data') and result.data:
+                if hasattr(result.data, '_answer'):
+                    final_answer = result.data._answer
+                elif hasattr(result.data, 'answer'):
+                    final_answer = result.data.answer
+            elif hasattr(result, '_answer'):
+                final_answer = result._answer
+            elif hasattr(result, 'answer'):
+                final_answer = result.answer
+            
+            if final_answer and 'linkedin.com/in/' in str(final_answer):
+                print("🔍 Found LinkedIn URLs in final answer")
+                import re
+                # Extract LinkedIn URLs
+                urls = re.findall(r'https://www\.linkedin\.com/in/[a-zA-Z0-9\-_]+/?', str(final_answer))
+                # Clean up URLs
+                cleaned_urls = []
+                for url in urls:
+                    cleaned_url = url.rstrip('.,!?":\'')
+                    if not cleaned_url.endswith('/'):
+                        cleaned_url += '/'
+                    cleaned_urls.append(cleaned_url)
+                
+                print(f"🔗 Found {len(cleaned_urls)} LinkedIn URLs")
+                
+                # Re-extract profiles from URLs
+                if cleaned_urls:
+                    candidates = self._retry_extraction_from_urls_list(cleaned_urls)
+            
+        except Exception as e:
+            print(f"⚠️  Failed to extract from final answer: {e}")
+        
+        return candidates
+    
+    def _retry_extraction_from_urls(self, result) -> List[Dict[str, Any]]:
+        """Retry extraction by finding URLs in result and re-extracting"""
+        try:
+            # First try to get URLs from final answer
+            candidates = self._extract_candidates_from_final_answer(result)
+            if candidates:
+                return candidates
+                
+            # If that fails, try to find URLs in step history
+            if hasattr(result, 'step_history'):
+                urls = set()
+                for step in result.step_history:
+                    action = getattr(step, 'action', None)
+                    function = getattr(step, 'function', None)
+                    func_obj = action or function
+                    
+                    if func_obj:
+                        func_name = getattr(func_obj, 'name', None)
+                        func_kwargs = getattr(func_obj, 'kwargs', {})
+                        
+                        if (func_name == 'go' and 
+                            isinstance(func_kwargs, dict) and
+                            'linkedin.com/in/' in str(func_kwargs.get('url', ''))):
+                            urls.add(func_kwargs['url'])
+                
+                if urls:
+                    print(f"🔗 Found {len(urls)} URLs from step history")
+                    return self._retry_extraction_from_urls_list(list(urls))
+            
+        except Exception as e:
+            print(f"⚠️  Failed to retry extraction from URLs: {e}")
+        
+        return []
+    
+    def _retry_extraction_from_urls_list(self, urls: List[str]) -> List[Dict[str, Any]]:
+        """Re-extract profiles from a list of URLs with error handling"""
+        candidates = []
+        
+        try:
+            from tools.extract_profile import extract_profile
+            from tools.web_nav import go, get_current_url
+            import time
+            
+            for i, url in enumerate(urls[:self.limit], 1):
+                try:
+                    print(f"⚙️  Re-extracting profile {i}: {url}")
+                    
+                    # Add delay to avoid rate limiting
+                    if i > 1:
+                        time.sleep(2)
+                    
+                    # Navigate to profile
+                    go(url)
+                    time.sleep(1)  # Wait for page load
+                    
+                    # Verify we're on the right page
+                    current_url = get_current_url()
+                    
+                    if '/feed/' in current_url or 'linkedin.com/in/' not in current_url:
+                        print(f"    ⚠️  Redirected away from profile - skipping")
+                        continue
+                    
+                    # Extract profile
+                    profile_data = extract_profile()
+                    
+                    # Validate extracted data
+                    if (isinstance(profile_data, dict) and 
+                        profile_data.get('name') and 
+                        profile_data.get('name').lower() != 'feed updates'):
+                        
+                        candidates.append({
+                            "search_info": {"url": url},
+                            "profile_details": profile_data
+                        })
+                        print(f"    ✅ Successfully extracted: {profile_data.get('name', 'Unknown')}")
+                    else:
+                        print(f"    ⚠️  Invalid profile data - skipping")
+                        
+                except Exception as e:
+                    print(f"    ❌ Failed to extract profile {i}: {e}")
+                    continue  # Continue with next URL
+            
+            print(f"📊 Successfully re-extracted {len(candidates)} candidates from URLs")
+            
+        except ImportError as e:
+            print(f"⚠️  Cannot import extraction tools: {e}")
+        except Exception as e:
+            print(f"❌ URL re-extraction failed: {e}")
+        
+        return candidates
