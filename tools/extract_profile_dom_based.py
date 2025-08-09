@@ -91,71 +91,60 @@ PROFILE_EXTRACTION_DOM_JS = r"""
   // ---------- EXPERIENCE ----------
   const scrapeExperience = (section) => {
     expandSeeMore(section);
-    const blocks = qa('[data-view-name="profile-component-entity"]', section);
+
     const out = [];
+    const blocks = qa('[data-view-name="profile-component-entity"]', section);
+
+    const norm = s => (s || '').replace(/\s+/g, ' ').trim();
 
     for (const item of blocks) {
-      // Title
+      // Title: bold line → aria-hidden text only
       const title =
         norm(q('.t-bold span[aria-hidden="true"]', item)?.textContent) ||
         norm(q('.hoverable-link-text.t-bold span[aria-hidden="true"]', item)?.textContent) ||
-        norm(q('.t-bold', item)?.textContent) || 'Unknown Title';
+        'Unknown Title';
 
-      // Company (prefer the labeled line under the title)
-      const companyLink = q('a[href*="/company/"]', item);
-      let company =
-        norm(companyLink?.textContent) ||
-        norm(qa('span', item).map(s => s.textContent).find(t =>
-          t && !/yr|mo|Present| - /.test(t) && t.length <= 80 && !t.includes('Experience'))) || 'Unknown Company';
+      // The three t-14 lines (company, dates, location) in order; aria-hidden text only
+      const metaSpans = qa('.t-14.t-normal span[aria-hidden="true"], .t-14.t-normal.t-black--light span[aria-hidden="true"]', item);
+      const company   = norm(metaSpans?.[0]?.textContent) || '';
+      const dateRaw   = norm(q('.pvs-entity__caption-wrapper[aria-hidden="true"]', item)?.textContent) // often the dates live here
+                      || norm(metaSpans?.[1]?.textContent) || '';
+      const location  = norm(metaSpans?.[2]?.textContent) || '';
 
-      // Dates/duration
-      const dateSpan = qa('span', item).map(s => norm(s.textContent)).find(t => DATE_RX.test(t));
+      // Dates/duration parse
+      const DATE_RX = /([A-Za-z]{3,9}\s\d{4})\s*-\s*(Present|[A-Za-z]{3,9}\s\d{4})(?:\s*·\s*([\d\s\w]+))?/i;
       let start_date = '', end_date = '', duration = '';
-      if (dateSpan) {
-        const m = dateSpan.match(DATE_RX);
-        if (m) {
-          start_date = m[1] || '';
-          end_date   = m[2] || '';
-          duration   = m[3] || '';
-        }
+      const m = DATE_RX.exec(dateRaw);
+      if (m) {
+        start_date = m[1] || '';
+        end_date   = m[2] || '';
+        duration   = m[3] || '';
       }
 
-      // Location
-      const location =
-        (qa('span', item).map(s => norm(s.textContent)).find(t => t && looksLikeLocation(t)) || '');
-
-      // Bullets / description
+      // Bullets: read only aria-hidden text; reconstruct line breaks
       let bullets = [];
-      const textHost = q('.inline-show-more-text--is-expanded, .inline-show-more-text--is-collapsed', item) || item;
+      const textHost = q('.inline-show-more-text--is-expanded, .inline-show-more-text--is-collapsed', item);
       if (textHost) {
-        // Reconstruct text with line breaks where <br> occur
-        const lines = [];
-        (function collect(n){
-          n.childNodes.forEach(ch => {
-            if (ch.nodeType === Node.TEXT_NODE) { const t = norm(ch.textContent); if (t) lines.push(t); }
-            else if (ch.nodeName === 'BR') { lines.push('\n'); }
-            else collect(ch);
-          });
-        })(textHost);
-        const joined = norm(lines.join(' ').replace(/\s*\n\s*/g, '\n'));
+        const nodes = qa('[aria-hidden="true"]', textHost); // only aria-hidden text nodes
+        const joined = norm(nodes.map(n => n.textContent || '').join('\n'));
         bullets = joined
-          .split('\n')
+          .split(/\n+/)
           .map(s => norm(s.replace(/^[-•]\s*/, '')))
           .filter(s => s && s.length > 3 && !DATE_RX.test(s));
       }
 
-      // External links & logo
-      const company_linkedin = companyLink?.getAttribute('href') || '';
+      const company_linkedin = q('a[href*="/company/"]', item)?.getAttribute('href') || '';
       const logo_url = q('.pvs-entity__image img, img[alt$="logo"]', item)?.getAttribute('src') || '';
       const company_website =
         q('.pvs-thumbnail__wrapper ~ a[href^="http"]', item)?.getAttribute('href') ||
         q('a[href^="http"]:not([href*="linkedin.com"])', item)?.getAttribute('href') || '';
 
-      // Clean
       const record = {
         title: title.replace(/(.+)\1+/, '$1'),
-        company: company.replace(/(.+)\1+/, '$1').replace(/\s*·\s*Full-time.*/i, ''),
-        start_date, end_date, duration,
+        company: (company || 'Unknown Company').replace(/(.+)\1+/, '$1').replace(/\s*·\s*Full-time.*/i, ''),
+        start_date,
+        end_date,
+        duration,
         location,
         bullets,
         company_linkedin,
@@ -163,10 +152,10 @@ PROFILE_EXTRACTION_DOM_JS = r"""
         logo_url
       };
 
-      // Skip obvious junk
       if (record.title === 'Unknown Title' && record.company === 'Unknown Company') continue;
       out.push(record);
     }
+
     return out;
   };
 
@@ -176,26 +165,42 @@ PROFILE_EXTRACTION_DOM_JS = r"""
     const blocks = qa('[data-view-name="profile-component-entity"]', section);
     const out = [];
 
+    // Regex: range or single date (e.g., "Sep 2021 - Jun 2025 · 4 yrs" OR "Jun 2027")
+    const RANGE_RX  = /([A-Za-z]{3,9}\s?\d{4}|\d{4})\s*-\s*(Present|[A-Za-z]{3,9}\s?\d{4}|\d{4})(?:\s*·\s*([\d\s\w]+))?/i;
+    const SINGLE_RX = /^(?:[A-Za-z]{3,9}\s)?\d{4}$/i;
+
+    const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+
     for (const item of blocks) {
+      // School: bold line → aria-hidden text only
       const schoolLink = q('a[href*="/school/"], a[href*="/company/"]', item);
       const school =
-        norm(schoolLink?.textContent) ||
         norm(q('.t-bold span[aria-hidden="true"]', item)?.textContent) ||
-        norm(q('.t-bold', item)?.textContent) || 'Unknown School';
+        norm(q('.t-bold', item)?.textContent) ||
+        norm(schoolLink?.textContent) ||
+        'Unknown School';
 
-      // Degree / program: usually in the following t-14 line
-      // (Matches your pasted HTML: “Bachelor of Commerce - BCom, Finance and Economics Specialist”)
-      const degree =
-        norm(q('.t-14.t-normal span[aria-hidden="true"]', item)?.textContent) ||
-        norm(q('.t-14.t-normal', item)?.textContent) || '';
+      // Degree/program: first t-14 line that is NOT the caption wrapper
+      const degreeSpan = qa('.t-14.t-normal span[aria-hidden="true"]', item)
+        .find(s => !s.closest('.pvs-entity__caption-wrapper'));
+      const degree = norm(degreeSpan?.textContent) || '';
 
-      // Dates are not present in your snippet, but keep parser ready
-      const rawSpans = qa('span', item).map(s => norm(s.textContent));
-      const dateSpan = rawSpans.find(t => DATE_RX.test(t)) || '';
+      // Date text lives in the caption wrapper (and is aria-hidden)
+      const dateText =
+        norm(q('.pvs-entity__caption-wrapper[aria-hidden="true"]', item)?.textContent) || '';
+
       let start_date = '', end_date = '', duration = '';
-      if (dateSpan) {
-        const m = dateSpan.match(DATE_RX);
-        if (m) { start_date = m[1] || ''; end_date = m[2] || ''; duration = m[3] || ''; }
+
+      if (dateText) {
+        const mRange = RANGE_RX.exec(dateText);
+        if (mRange) {
+          start_date = mRange[1] || '';
+          end_date   = mRange[2] || '';
+          duration   = mRange[3] || '';
+        } else if (SINGLE_RX.test(dateText)) {
+          // Single graduation date (e.g., "Jun 2027" or "2027")
+          end_date = dateText;
+        }
       }
 
       const logo_url = q('.pvs-entity__image img, img[alt$="logo"]', item)?.getAttribute('src') || '';
@@ -204,11 +209,14 @@ PROFILE_EXTRACTION_DOM_JS = r"""
       out.push({
         school: school.replace(/(.+)\1+/, '$1'),
         degree: degree.replace(/(.+)\1+/, '$1'),
-        start_date, end_date, duration,
+        start_date,
+        end_date,
+        duration,
         logo_url,
         school_linkedin
       });
     }
+
     return out;
   };
   
@@ -228,7 +236,72 @@ PROFILE_EXTRACTION_DOM_JS = r"""
   const experiences = experienceSection ? scrapeExperience(experienceSection) : [];
   const education   = educationSection  ? scrapeEducation(educationSection)  : [];
 
-  
+  // ---------- CERTIFICATIONS ----------
+
+  const scrapeCertifications = (section) => {
+    expandSeeMore(section);
+    const blocks = qa('[data-view-name="profile-component-entity"]', section);
+    const out = [];
+
+    const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+
+    // e.g., "Issued Sep 2014 · Expires Sep 2016" OR "Issued Sep 2014"
+    const ISSUED_RX = /Issued\s+([A-Za-z]{3,9}\s?\d{4}|\d{4})(?:\s*·\s*Expires\s+([A-Za-z]{3,9}\s?\d{4}|\d{4}))?/i;
+
+    for (const item of blocks) {
+      // Title (cert name)
+      const name =
+        norm(q('.t-bold span[aria-hidden="true"]', item)?.textContent) ||
+        'Unknown Certification';
+
+      // Issuer: first .t-14 line (aria-hidden)
+      const issuer =
+        norm(q('.t-14.t-normal span[aria-hidden="true"]', item)?.textContent) || '';
+
+      // Issued/Expires: caption wrapper (aria-hidden)
+      const issuedRaw =
+        norm(q('.pvs-entity__caption-wrapper[aria-hidden="true"]', item)?.textContent) || '';
+      let issued_on = '', expires_on = '';
+      const m = ISSUED_RX.exec(issuedRaw);
+      if (m) {
+        issued_on  = m[1] || '';
+        expires_on = m[2] || '';
+      }
+
+      // Credential ID: look for a black--light t-14 line that starts with "Credential ID"
+      const idSpan = qa('.t-14.t-normal.t-black--light span[aria-hidden="true"]', item)
+        .find(s => /Credential ID/i.test(s.textContent || ''));
+      const credential_id = idSpan
+        ? norm((idSpan.textContent || '').replace(/^\s*Credential ID\s*/i, ''))
+        : '';
+
+      // Links & logo
+      const issuer_linkedin = q('a[href*="/company/"]', item)?.getAttribute('href') || '';
+      const logo_url = q('.pvs-entity__image img, img[alt$="logo"]', item)?.getAttribute('src') || '';
+      // Prefer explicit credential link; fallback to any non-LinkedIn http link in the item
+      const credential_url =
+        q('a.optional-action-target-wrapper[href^="http"]:not([href*="linkedin.com"])', item)?.getAttribute('href') ||
+        q('.pvs-entity__sub-components a[href^="http"]:not([href*="linkedin.com"])', item)?.getAttribute('href') ||
+        q('a[href^="http"]:not([href*="linkedin.com"])', item)?.getAttribute('href') || '';
+
+      out.push({
+        name,
+        issuer,
+        issued_on,
+        expires_on,
+        credential_id,
+        credential_url,
+        issuer_linkedin,
+        logo_url
+      });
+    }
+
+    return out;
+  };
+
+  const certsSection = findSectionByAnchorId('licenses_and_certifications');
+  const certifications = certsSection ? scrapeCertifications(certsSection) : [];
+
   // Extract Skills - uses .pvs-entity__sub-components .artdeco-list__item (from analysis)
   let skills = [];
   const skillsSection = findSectionByLabel('skills');
@@ -254,13 +327,45 @@ PROFILE_EXTRACTION_DOM_JS = r"""
       .slice(0, 15);
   }
   
+  // ---------- LANGUAGES ----------
+  const scrapeLanguages = (section) => {
+    expandSeeMore(section);
+    const blocks = qa('[data-view-name="profile-component-entity"]', section);
+    const out = [];
+    const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+
+    for (const item of blocks) {
+      const name =
+        norm(q('.t-bold span[aria-hidden="true"]', item)?.textContent) ||
+        'Unknown Language';
+
+      // Proficiency lives in caption wrapper aria-hidden
+      const proficiency =
+        norm(q('.pvs-entity__caption-wrapper[aria-hidden="true"]', item)?.textContent) || '';
+
+      out.push({ name, proficiency });
+    }
+
+    // Optional: capture “see all” link if you want to follow to the detail page
+    const seeAll =
+      q('#navigation-index-see-all-languages', section)?.getAttribute('href') || '';
+    return { items: out, see_all_url: seeAll };
+  };
+
+  // usage:
+  const languagesSection = document.querySelector('div#languages.pv-profile-card__anchor')
+    ?.closest('section.artdeco-card');
+  const languages = languagesSection ? scrapeLanguages(languagesSection) : { items: [], see_all_url: '' };
+
   return {
     name,
     headline,
     about,
     experiences,
     education,
+    certifications,
     skills,
+    languages,
     location,
     url: window.location.href,
     extraction_timestamp: new Date().toISOString(),
