@@ -48,7 +48,40 @@ class Education(DataClass):
         metadata={"desc": "Activities, honors, relevant coursework"}
     )
 
+@dataclass
+class Certification(DataClass):
+    """Professional certification entry"""
+    name: str = field(metadata={"desc": "Certification name"})
+    issuer: Optional[str] = field(
+        default=None,
+        metadata={"desc": "Organization that issued the certification"}
+    )
+    issued_on: Optional[str] = field(
+        default=None,
+        metadata={"desc": "Date when the certification was issued (e.g. 'Mar 2021')"}
+    )
+    expires_on: Optional[str] = field(
+        default=None,
+        metadata={"desc": "Expiration date if applicable (e.g. 'Mar 2024' or 'No Expiration')"}
+    )
+    credential_id: Optional[str] = field(
+        default=None,
+        metadata={"desc": "Unique ID for the certification"}
+    )
+    credential_url: Optional[str] = field(
+        default=None,
+        metadata={"desc": "URL to verify the certification online"}
+    )
 
+@dataclass
+class Language(DataClass):
+    """Language proficiency entry"""
+    name: str = field(metadata={"desc": "Language name"})
+    proficiency: Optional[str] = field(
+        default=None,
+        metadata={"desc": "Proficiency level (e.g. 'Native', 'Fluent', 'Professional Working Proficiency')"}
+    )
+    
 @dataclass
 class Skill(DataClass):
     """Professional skill with endorsements"""
@@ -88,10 +121,20 @@ class LinkedInProfile(DataClass):
         metadata={"desc": "List of educational background entries"}
     )
     
+    certifications: List[Certification] = field(
+        default_factory=list,
+        metadata={"desc": "List of professional certifications"}
+    )
+        
     # Skills
     skills: List[Skill] = field(
         default_factory=list,
         metadata={"desc": "List of professional skills with endorsement counts"}
+    )
+    
+    languages: List[Language] = field(
+        default_factory=list,
+        metadata={"desc": "List of languages known with proficiency levels"}
     )
     
     # Contact and Social
