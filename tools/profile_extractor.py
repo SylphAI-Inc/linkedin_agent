@@ -1,43 +1,10 @@
-"""
-Enhanced LinkedIn Profile Extraction using AdalFlow DataClass and Output Parsers
-"""
-import sys
-import json
-from pathlib import Path
-from typing import Dict, Any, Optional
-from adalflow.core import Generator
-from adalflow.components.output_parsers.dataclass_parser import DataClassParser
-from adalflow.components.model_client import OpenAIClient
 from adalflow.core.func_tool import FunctionTool
+from .web_nav import js as run_js
+from typing import Dict, Any, List
+import json
+from datetime import datetime
 
-# Add repo root to path
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from models.linkedin_profile import LinkedInProfile, Experience, Education, Skill
-from .web_nav import js as run_js, go, wait
-from config import get_model_kwargs
-
-
-# AI Prompt for parsing raw profile data
-PROFILE_ANALYSIS_PROMPT = r"""
-You are a LinkedIn profile data parser. Parse the following raw LinkedIn profile data into a structured format.
-
-Raw Profile Data:
-{raw_data}
-
-Instructions:
-- Extract all available information accurately
-- Structure the data according to the provided format
-- If information is missing or unclear, use appropriate defaults
-- Ensure all fields are properly typed and formatted
-
-{format_instructions}
-"""
-
-# Comprehensive JavaScript for deep profile extraction
-COMPREHENSIVE_PROFILE_JS = r"""
+PROFILE_JS = r"""
 (() => {
   // Wait for content to load
   const waitForContent = (maxAttempts = 10) => {
@@ -417,249 +384,177 @@ COMPREHENSIVE_PROFILE_JS = r"""
 })()
 """
 
-
-class ProfileExtractor:
-    """Enhanced LinkedIn profile extractor with AI parsing"""
+# Enhanced validation and completeness functions
+def validate_profile_data(profile_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and clean profile data"""
+    if not profile_data:
+        return {}
     
-    def __init__(self):
-        self.client = OpenAIClient()
-        self.parser = DataClassParser(
-            data_class=LinkedInProfile,
-            return_data_class=True,
-            format_type="json"
+    # Ensure required fields exist with defaults
+    validated = {
+        "name": profile_data.get("name", "Unknown Name"),
+        "headline": profile_data.get("headline", ""),
+        "about": profile_data.get("about", ""),
+        "experiences": profile_data.get("experiences", []),
+        "education": profile_data.get("education", []),
+        "skills": profile_data.get("skills", []),
+        "certifications": profile_data.get("certifications", []),
+        "languages": profile_data.get("languages", {}),
+        "location": profile_data.get("location", ""),
+        "url": profile_data.get("url", ""),
+        "extraction_timestamp": profile_data.get("extraction_timestamp", datetime.now().isoformat()),
+        "extraction_method": profile_data.get("extraction_method", "dom_based_enhanced")
+    }
+    
+    # Clean and validate experiences
+    clean_experiences = []
+    for exp in validated["experiences"]:
+        if isinstance(exp, dict) and exp.get("title") and exp.get("company"):
+            clean_exp = {
+                "title": str(exp.get("title", "")).strip(),
+                "company": str(exp.get("company", "")).strip(),
+                "duration": str(exp.get("duration", "")).strip(),
+                "location": str(exp.get("location", "")).strip(),
+                "description": str(exp.get("description", "")).strip()
+            }
+            # Skip if both title and company are "Unknown"
+            if not (clean_exp["title"].lower().startswith("unknown") and 
+                   clean_exp["company"].lower().startswith("unknown")):
+                clean_experiences.append(clean_exp)
+    
+    validated["experiences"] = clean_experiences
+    
+    # Clean and validate education
+    clean_education = []
+    for edu in validated["education"]:
+        if isinstance(edu, dict) and (edu.get("school") or edu.get("degree")):
+            clean_edu = {
+                "school": str(edu.get("school", "")).strip(),
+                "degree": str(edu.get("degree", "")).strip(),
+                "year": str(edu.get("year", "")).strip(),
+                "field": str(edu.get("field", "")).strip()
+            }
+            clean_education.append(clean_edu)
+    
+    validated["education"] = clean_education
+    
+    # Clean skills - remove duplicates and noise
+    if isinstance(validated["skills"], list):
+        clean_skills = []
+        seen = set()
+        for skill in validated["skills"]:
+            skill_str = str(skill)
+            if skill_str:
+                skill_str = skill_str.strip()
+            if (skill_str and len(skill_str) > 2 and len(skill_str) < 50 and 
+                skill_str.lower() not in seen and
+                not any(noise in skill_str.lower() for noise in ['endorsed', 'endorse', 'months', 'show all'])):
+                clean_skills.append(skill_str)
+                seen.add(skill_str.lower())
+        validated["skills"] = clean_skills[:15]  # Limit to top 15
+    
+    return validated
+
+def calculate_enhanced_completeness(profile_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Calculate detailed completeness metrics"""
+    if not profile_data:
+        return {"total_score": 0, "completeness_percentage": 0}
+    
+    # Basic completeness (from original scoring)
+    basic_score = profile_data.get("data_quality", {}).get("total_score", 0)
+    
+    # Enhanced completeness factors
+    enhanced_factors = {
+        "has_comprehensive_about": bool((profile_data.get("about") or "").strip() and len(profile_data.get("about") or "") > 100),
+        "has_multiple_experiences": len(profile_data.get("experiences", [])) >= 2,
+        "has_detailed_experiences": any(
+            (exp.get("description") or "").strip() for exp in profile_data.get("experiences", [])
+        ),
+        "has_education_details": any(
+            (edu.get("degree") or "").strip() for edu in profile_data.get("education", [])
+        ),
+        "has_certifications": len(profile_data.get("certifications", [])) > 0,
+        "has_languages": bool(profile_data.get("languages", {}).get("items", [])),
+        "has_diverse_skills": len(profile_data.get("skills", [])) >= 5,
+        "has_recent_experience": any(
+            "Present" in exp.get("duration", "") for exp in profile_data.get("experiences", [])
         )
-        self.generator = Generator(
-            model_client=self.client,
-            model_kwargs=get_model_kwargs(),
-            template=PROFILE_ANALYSIS_PROMPT,
-            output_processors=self.parser
-        )
+    }
     
-    def navigate_to_profile(self, profile_url: str) -> bool:
-        """Navigate to a specific LinkedIn profile"""
+    enhanced_score = sum(enhanced_factors.values())
+    total_possible = 6 + len(enhanced_factors)  # 6 basic + enhanced factors
+    
+    completeness_data = {
+        "basic_score": basic_score,
+        "enhanced_score": enhanced_score,
+        "total_score": basic_score + enhanced_score,
+        "max_possible": total_possible,
+        "completeness_percentage": round((basic_score + enhanced_score) / total_possible * 100, 1),
+        "factors": {
+            "basic": {
+                "has_name": bool((profile_data.get("name") or "").strip()),
+                "has_headline": bool((profile_data.get("headline") or "").strip()),
+                "has_about": bool((profile_data.get("about") or "").strip()),
+                "has_experiences": len(profile_data.get("experiences", [])) > 0,
+                "has_education": len(profile_data.get("education", [])) > 0,
+                "has_location": bool((profile_data.get("location") or "").strip())
+            },
+            "enhanced": enhanced_factors
+        }
+    }
+    
+    return completeness_data
+
+def extract_profile() -> Dict[str, Any]:
+    """Enhanced DOM-based profile extraction with validation and completeness scoring"""
+    try:
+        # Run the proven DOM extraction JavaScript
+        raw_data = run_js(PROFILE_JS)
+        
+        if not raw_data or not isinstance(raw_data, dict):
+            return {
+                "error": "Failed to extract profile data - no data returned",
+                "extraction_timestamp": datetime.now().isoformat(),
+                "extraction_method": "dom_based_enhanced",
+                "extraction_success": False
+            }
+        
+        # Validate and clean the data
+        validated_data = validate_profile_data(raw_data)
+        
+        # Calculate enhanced completeness (with extra safety)
         try:
-            print(f"Navigating to profile: {profile_url}")
-            go(profile_url)
-            
-            # Wait for profile to load
-            if wait('main h1', timeout=10.0):
-                print("Profile loaded successfully")
-                return True
-            else:
-                print("Profile failed to load")
-                return False
-                
-        except Exception as e:
-            print(f"Navigation error: {e}")
-            return False
+            completeness = calculate_enhanced_completeness(validated_data)
+        except Exception as completeness_error:
+            # Fallback to basic scoring if enhanced completeness fails
+            completeness = {
+                "total_score": 0,
+                "completeness_percentage": 0,
+                "error": f"Completeness calculation failed: {str(completeness_error)}"
+            }
+        
+        # Add completeness to the result
+        validated_data["data_quality"] = completeness
+        validated_data["extraction_success"] = True
+        
+        return validated_data
+        
+    except Exception as e:
+        return {
+            "error": f"Profile extraction failed: {str(e)}",
+            "extraction_timestamp": datetime.now().isoformat(),
+            "extraction_method": "dom_based_enhanced",
+            "extraction_success": False
+        }
+
+# Enhanced extraction functions for different use cases
+def extract_complete_profile(profile_url: str = None) -> Dict[str, Any]:
+    """Extract complete profile - handles URL navigation if provided"""
+    if profile_url:
+        from .web_nav import go
+        go(profile_url)
     
-    def extract_raw_profile_data(self) -> Dict[str, Any]:
-        """Extract raw profile data using JavaScript"""
-        try:
-            print("Extracting raw profile data...")
-            raw_data = run_js(COMPREHENSIVE_PROFILE_JS)
-            
-            if raw_data and isinstance(raw_data, dict):
-                print(f"Raw data extracted: {raw_data.get('name', 'Unknown')}")
-                return raw_data
-            else:
-                print("No raw data extracted")
-                return {}
-                
-        except Exception as e:
-            print(f"Extraction error: {e}")
-            return {}
-    
-    def parse_with_ai(self, raw_data: Dict[str, Any]) -> Optional[LinkedInProfile]:
-        """Use AI to parse and structure the raw profile data"""
-        try:
-            print("Parsing raw data with AI...")
-            
-            # Prepare the data for the AI prompt
-            raw_json = json.dumps(raw_data, indent=2)
-            
-            # Generate structured output using direct call with prompt_kwargs
-            response = self.generator(
-                prompt_kwargs={
-                    "raw_data": raw_json,
-                    "format_instructions": self.parser.get_output_format_str()
-                }
-            )
-            
-            if response and hasattr(response, 'data'):
-                profile = response.data
-                print(f"AI parsing successful: {profile.name}")
-                return profile
-            else:
-                print("AI parsing failed - no structured data returned")
-                return None
-                
-        except Exception as e:
-            print(f"AI parsing error: {e}")
-            return None
-    
-    def fallback_parse(self, raw_data: Dict[str, Any]) -> LinkedInProfile:
-        """Fallback parsing without AI if needed"""
-        try:
-            print("Using fallback parsing...")
-            
-            # Extract experiences
-            experiences = []
-            if raw_data.get('experience'):
-                for exp in raw_data['experience']:
-                    if isinstance(exp, dict):
-                        experiences.append(Experience(
-                            title=exp.get('title', ''),
-                            company=exp.get('company', ''),
-                            duration=exp.get('duration', ''),
-                            location=exp.get('location'),
-                            description=exp.get('description')
-                        ))
-            
-            # Extract education
-            education = []
-            if raw_data.get('education'):
-                for edu in raw_data['education']:
-                    if isinstance(edu, dict):
-                        education.append(Education(
-                            institution=edu.get('institution', ''),
-                            degree=edu.get('degree'),
-                            duration=edu.get('duration')
-                        ))
-            
-            # Extract skills
-            skills = []
-            if raw_data.get('skills'):
-                for skill in raw_data['skills']:
-                    if isinstance(skill, dict):
-                        skills.append(Skill(
-                            name=skill.get('name', ''),
-                            endorsements=skill.get('endorsements', 0)
-                        ))
-            
-            # Basic industry keywords extraction
-            industry_keywords = []
-            text_to_analyze = f"{raw_data.get('headline', '')} {raw_data.get('about', '')}"
-            common_keywords = ['software', 'engineering', 'product', 'management', 'data', 'marketing', 
-                             'sales', 'design', 'analytics', 'AI', 'machine learning', 'cloud']
-            
-            for keyword in common_keywords:
-                if keyword.lower() in text_to_analyze.lower():
-                    industry_keywords.append(keyword)
-            
-            # Calculate completeness score
-            completeness_score = self._calculate_completeness(raw_data)
-            
-            profile = LinkedInProfile(
-                name=raw_data.get('name', ''),
-                headline=raw_data.get('headline', ''),
-                location=raw_data.get('location'),
-                about=raw_data.get('about'),
-                experience=experiences,
-                education=education,
-                skills=skills,
-                linkedin_url=raw_data.get('linkedin_url'),
-                total_experience_years=raw_data.get('total_experience_years'),
-                current_company=raw_data.get('current_company'),
-                current_title=raw_data.get('current_title'),
-                industry_keywords=industry_keywords,
-                extraction_timestamp=raw_data.get('extraction_timestamp'),
-                data_completeness_score=completeness_score
-            )
-            
-            print(f"Fallback parsing successful: {profile.name}")
-            return profile
-            
-        except Exception as e:
-            print(f"Fallback parsing error: {e}")
-            # Return minimal profile
-            return LinkedInProfile(
-                name=raw_data.get('name', 'Unknown'),
-                headline=raw_data.get('headline', ''),
-                linkedin_url=raw_data.get('linkedin_url'),
-                extraction_timestamp=raw_data.get('extraction_timestamp'),
-                data_completeness_score=0.1
-            )
-    
-    def _calculate_completeness(self, raw_data: Dict[str, Any]) -> float:
-        """Calculate how complete the extracted data is"""
-        fields_to_check = [
-            ('name', 0.2),           # 20% - essential
-            ('headline', 0.15),      # 15% - very important  
-            ('about', 0.15),         # 15% - very important
-            ('experience', 0.25),    # 25% - critical
-            ('education', 0.1),      # 10% - important
-            ('skills', 0.1),         # 10% - nice to have
-            ('location', 0.05),      # 5% - minor
-        ]
-        
-        score = 0.0
-        for field, weight in fields_to_check:
-            value = raw_data.get(field)
-            if value:
-                if isinstance(value, list) and len(value) > 0:
-                    score += weight
-                elif isinstance(value, str) and value.strip():
-                    score += weight
-                elif value:  # other truthy values
-                    score += weight
-        
-        return min(score, 1.0)
-    
-    def extract_complete_profile(self, profile_url: str) -> Optional[LinkedInProfile]:
-        """Complete profile extraction workflow"""
-        print(f"Starting complete profile extraction for: {profile_url}")
-        
-        # Step 1: Navigate to profile
-        if not self.navigate_to_profile(profile_url):
-            return None
-        
-        # Step 2: Extract raw data
-        raw_data = self.extract_raw_profile_data()
-        if not raw_data:
-            return None
-        
-        # Step 3: Parse with AI (with fallback)
-        profile = self.parse_with_ai(raw_data)
-        if not profile:
-            profile = self.fallback_parse(raw_data)
-        
-        print(f"Profile extraction complete: {profile.name} (completeness: {profile.data_completeness_score:.2f})")
-        return profile
-
-
-# Global extractor instance (created on demand)
-_extractor = None
-
-def get_global_extractor():
-    """Get or create global extractor instance"""
-    global _extractor
-    if _extractor is None:
-        _extractor = ProfileExtractor()
-    return _extractor
-
-
-def extract_complete_profile(profile_url: str) -> dict:
-    """Extract complete LinkedIn profile - function tool wrapper"""
-    profile = get_global_extractor().extract_complete_profile(profile_url)
-    if profile:
-        return profile.to_dict()
-    else:
-        return {"error": "Failed to extract profile", "url": profile_url}
-
-
-def extract_current_profile() -> dict:
-    """Extract profile from current page - function tool wrapper"""
-    raw_data = get_global_extractor().extract_raw_profile_data()
-    if raw_data:
-        profile = get_global_extractor().parse_with_ai(raw_data)
-        if not profile:
-            profile = get_global_extractor().fallback_parse(raw_data)
-        return profile.to_dict()
-    else:
-        return {"error": "Failed to extract current profile"}
-
+    return extract_profile()
 
 # Function tools for agent
-# ExtractCompleteProfileTool = FunctionTool(fn=extract_complete_profile)
-ExtractCurrentProfileTool = FunctionTool(fn=extract_current_profile)
+ExtractCompleteProfileTool = FunctionTool(fn=extract_complete_profile)

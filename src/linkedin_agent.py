@@ -7,10 +7,9 @@ from adalflow.core.func_tool import FunctionTool
 
 from config import AgentConfig, get_model_kwargs
 from tools.web_nav import GoTool, ClickTool, TypeTool, KeyTool, JsTool, WaitTool
-from tools.extract_profile import ExtractCompleteProfileTool
 from tools.people_search import SearchPeopleTool
 from tools.linkedin_auth import CheckAuthTool, NavigateLinkedInTool, PromptLoginTool
-# from tools.profile_extractor import ExtractCompleteProfileTool, ExtractCurrentProfileTool
+from tools.profile_extractor import ExtractCompleteProfileTool
 from tools.candidate_scorer import ScoreCandidateTool, ScoreMultipleCandidatesTool
 
 
@@ -51,8 +50,6 @@ class LinkedInAgent:
                 PromptLoginTool,
                 # Profile extraction tools
                 ExtractCompleteProfileTool,  # Primary DOM-based extraction (proven superior)
-                # ExtractCompleteProfileTool,  # AI-enhanced extraction (temporarily disabled - was causing None returns)
-                # ExtractCurrentProfileTool,  # Extract from current page
                 # Search and scoring tools
                 SearchPeopleTool,
                 ScoreCandidateTool,  # AI-powered candidate scoring
