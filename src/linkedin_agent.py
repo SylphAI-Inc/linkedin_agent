@@ -10,7 +10,15 @@ from tools.web_nav import GoTool, ClickTool, TypeTool, KeyTool, JsTool, WaitTool
 from tools.people_search import SearchPeopleTool
 from tools.linkedin_auth import CheckAuthTool, NavigateLinkedInTool, PromptLoginTool
 from tools.profile_extractor import ExtractCompleteProfileTool
-from tools.candidate_scorer import ScoreCandidateTool, ScoreMultipleCandidatesTool
+# from tools.candidate_scorer import ScoreCandidateTool, ScoreMultipleCandidatesTool  # Commented out - using new workflow
+from tools.smart_search import SmartCandidateSearchTool, GetCollectedCandidatesTool, ClearCandidateCollectionTool
+from tools.targeted_extraction import ExtractCandidateProfilesTool, GetExtractionSummaryTool
+from tools.candidate_outreach import (
+    EvaluateCandidateForOutreachTool, 
+    BulkEvaluateCandidatesForOutreachTool,
+    GetOutreachSummaryTool,
+    SaveOutreachResultsTool
+)
 
 
 class LinkedInAgent:
@@ -48,12 +56,23 @@ class LinkedInAgent:
                 CheckAuthTool,
                 NavigateLinkedInTool, 
                 PromptLoginTool,
-                # Profile extraction tools
-                ExtractCompleteProfileTool,  # Primary DOM-based extraction (proven superior)
-                # Search and scoring tools
-                SearchPeopleTool,
-                ScoreCandidateTool,  # AI-powered candidate scoring
-                ScoreMultipleCandidatesTool,  # Batch scoring
+                # Profile extraction tools (legacy - for fallback only)
+                # ExtractCompleteProfileTool,  # Commented out - using targeted extraction now
+                # Search and scoring tools (legacy)
+                # SearchPeopleTool,  # Commented out - using smart search now
+                # ScoreCandidateTool,  # Commented out - using new workflow
+                # ScoreMultipleCandidatesTool,  # Commented out - using new workflow
+                # New workflow tools
+                SmartCandidateSearchTool,  # Strategy-based candidate discovery
+                GetCollectedCandidatesTool,  # Get quality candidate URLs
+                ClearCandidateCollectionTool,  # Clear candidate collection
+                ExtractCandidateProfilesTool,  # Extract profiles from URLs
+                GetExtractionSummaryTool,  # Extraction status summary
+                # Outreach tools
+                EvaluateCandidateForOutreachTool,  # Evaluate single candidate for outreach
+                BulkEvaluateCandidatesForOutreachTool,  # Evaluate multiple candidates
+                GetOutreachSummaryTool,  # Get outreach evaluation summary
+                SaveOutreachResultsTool,  # Save outreach results to file
             ]
 
         # Initialize Agent and Runner

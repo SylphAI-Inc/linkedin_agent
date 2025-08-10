@@ -37,6 +37,7 @@ class ModelConfig:
 @dataclass
 class AgentConfig:
     max_steps: int = int(os.getenv("AGENT_MAX_STEPS", "20"))
+    enable_outreach_evaluation: bool = os.getenv("ENABLE_OUTREACH_EVALUATION", "true").lower() == "true"
 
 
 def _is_port_in_use(port: int) -> bool:
@@ -84,13 +85,25 @@ class CDPConfig:
             # Start Chrome with CDP
             subprocess.Popen([
                 "chromium-browser",
+                "--headless",
                 f"--remote-debugging-port={self.port}",
                 f"--user-data-dir=./chrome_data-{self.port}",
                 "--no-first-run",
                 "--no-default-browser-check", 
                 "--disable-web-security",
                 "--disable-features=VizDisplayCompositor",
-                "--remote-allow-origins=*"
+                "--remote-allow-origins=*",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-software-rasterizer",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+                "--disable-extensions",
+                "--enable-unsafe-swiftshader",
+                "--no-zygote",
+                "--use-gl=disabled"
             ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             # Wait for startup

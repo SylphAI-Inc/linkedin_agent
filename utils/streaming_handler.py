@@ -103,7 +103,7 @@ class StreamingHandler:
     def log_profile_extraction(self, candidate_name: str, extraction_success: bool, profile_data: Optional[Dict[str, Any]] = None):
         """Log profile extraction results"""
         details = {
-            "action": "extract_profile",
+            "action": "extract_complete_profile",
             "candidate_name": candidate_name,
             "extraction_success": extraction_success
         }
@@ -126,18 +126,36 @@ class StreamingHandler:
         if extraction_success:
             self.candidates_found += 1
     
-    def log_completion(self, total_candidates: int, success_count: int):
-        """Log agent completion"""
-        duration = (datetime.now() - self.start_time).total_seconds()
+    def log_completion(self, final_results: List[Dict[str, Any]]):
+        """Log workflow completion with final results"""
+        self.candidates_found = len(final_results)
+        self.status = "completed"
+        self.current_action = "workflow_complete"
         
-        self.log_step("completion", {
-            "action": "workflow_complete", 
-            "total_candidates_found": total_candidates,
-            "successful_extractions": success_count,
-            "total_steps": self.step_count,
-            "duration_seconds": duration,
-            "success_rate": success_count / max(total_candidates, 1) * 100
-        }, "completed")
+        # Count successful extractions (candidates with profile_details)
+        successful_extractions = len([c for c in final_results if c.get("profile_details")])
+        
+        details = {
+            "total_candidates_found": len(final_results),  # Fixed key name
+            "successful_extractions": successful_extractions,  # Added expected key
+            "duration_seconds": (datetime.now() - self.start_time).total_seconds(),  # Added duration
+            "candidates": [{"name": r.get("name", "Unknown"), "url": r.get("url", "")} 
+                          for r in final_results[:5]]  # Show first 5
+        }
+        
+        self.log_step("completion", details, "completed")
+    
+    def log_outreach_evaluation(self, outreach_summary: Dict[str, Any]):
+        """Log outreach evaluation results"""
+        details = {
+            "total_evaluated": outreach_summary.get("total_evaluated", 0),
+            "recommended_for_outreach": outreach_summary.get("recommended_for_outreach", 0),
+            "outreach_rate": outreach_summary.get("outreach_rate", "0%"),
+            "outreach_file": outreach_summary.get("saved_to", "Not saved")
+        }
+        
+        self.log_step("outreach_evaluation", details, "completed")
+        print(f"📨 Outreach evaluation complete: {details['recommended_for_outreach']}/{details['total_evaluated']} candidates recommended")
     
     def log_error(self, error_type: str, error_message: str, context: Optional[Dict[str, Any]] = None):
         """Log an error that occurred"""
@@ -305,10 +323,21 @@ class AgentProgressTracker:
     
     def log_completion(self, candidates: List[Dict[str, Any]]):
         if self.streamer:
-            successful = len([c for c in candidates if c.get("profile_details")])
-            self.streamer.log_completion(len(candidates), successful)
+            self.streamer.log_completion(candidates)  # Fixed: pass candidates directly
             print("=" * 60)
             print(f"✅ Workflow completed successfully!")
+    
+    def log_outreach_evaluation(self, outreach_summary: Dict[str, Any]):
+        """Log outreach evaluation results"""
+        if self.streamer:
+            self.streamer.log_outreach_evaluation(outreach_summary)
+        
+        # Also print a summary to console
+        total = outreach_summary.get("total_evaluated", 0)
+        recommended = outreach_summary.get("recommended_for_outreach", 0)
+        rate = outreach_summary.get("outreach_rate", "0%")
+        
+        print(f"📨 Outreach evaluation complete: {recommended}/{total} candidates recommended ({rate})")
     
     def log_error(self, error_type: str, message: str, context: Optional[Dict] = None):
         if self.streamer:

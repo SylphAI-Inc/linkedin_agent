@@ -3,6 +3,7 @@ from .web_nav import js as run_js
 from typing import Dict, Any, List
 import json
 from datetime import datetime
+import traceback
 
 PROFILE_JS = r"""
 (() => {
@@ -28,14 +29,48 @@ PROFILE_JS = r"""
     });
   };
   
-  // Extract basic info using proven selectors
-  const name = grab('h1, .ph5 h1');
-  const headline = grab('.text-body-medium.break-words, .ph5 .text-body-medium');
-  const location = grab('.text-body-small.inline.t-black--light.break-words') ||
-                  Array.from(document.querySelectorAll('span, div'))
-                    .map(x => x.textContent?.trim())
-                    .find(t => t && /^[A-Za-z\s,]+,\s*[A-Za-z\s]+$/.test(t) && t.length < 100) || 
-                  null;
+  // Extract basic info using proven selectors (simplified from working version)
+  // ---------- BASIC INFO: Name & Headline ----------
+
+  const firstText = sels => {
+    for (const s of sels) {
+      const t = grab(s);
+      if (t) return t;
+    }
+    return null;
+  };
+
+  const name = firstText([
+    'h1.inline.t-24.v-align-middle.break-words', // primary selector
+    'h1',                                        // generic fallback
+    '.ph5 h1'                                    // section-based fallback
+  ]);
+
+  const headline = firstText([
+    'div.text-body-medium.break-words',          // primary selector
+    '.ph5 .text-body-medium',                    // section-based fallback
+    '.pv-top-card--list .text-body-medium',      // legacy layout
+    '.pv-top-card__headline',                    // alternative layout
+    '[data-testid="profile-headline"]',          // test-id selector
+    '.artdeco-entity-lockup__subtitle',          // lockup layout
+    'main .text-body-medium'                     // last-resort generic
+  ]);
+
+    // Debug logging
+    console.log('Profile extraction debug:', {
+        name: name || 'NAME_NOT_FOUND',
+        headline: headline || 'HEADLINE_NOT_FOUND',
+        url: window.location.href,
+        page_title: document.title
+    });  
+    
+    const location = grab('.text-body-small.inline.t-black--light.break-words') ||
+        grab('.pv-text-details__left-panel .text-body-small') ||
+        grab('.text-body-small') ||
+        Array.from(document.querySelectorAll('span, div'))
+          .map(x => x.textContent?.trim())
+          .find(t => t && /^[A-Za-z\s,]+,\s*[A-Za-z\s]+$/.test(t) && t.length < 100) || 
+        null;
   
   // Extract About section - uses .ph5 .pv3 containers (from analysis)
   let about = null;
@@ -541,13 +576,13 @@ def extract_profile() -> Dict[str, Any]:
         
     except Exception as e:
         return {
-            "error": f"Profile extraction failed: {str(e)}",
+            "error": f"Profile extraction failed: {traceback.format_exc()}",
             "extraction_timestamp": datetime.now().isoformat(),
             "extraction_method": "dom_based_enhanced",
             "extraction_success": False
         }
 
-# Enhanced extraction functions for different use cases
+# Enhanced extraction functions for different use cases  
 def extract_complete_profile(profile_url: str = None) -> Dict[str, Any]:
     """Extract complete profile - handles URL navigation if provided"""
     if profile_url:
@@ -556,5 +591,89 @@ def extract_complete_profile(profile_url: str = None) -> Dict[str, Any]:
     
     return extract_profile()
 
+def extract_current_profile() -> Dict[str, Any]:
+    """Extract profile from current page"""
+    return extract_profile()
+
+def evaluate_profile_with_strategy(profile_data: Dict[str, Any], strategy: Dict[str, Any]) -> Dict[str, Any]:
+    """Evaluate extracted profile using search strategy context"""
+    try:
+        from .people_search import get_evaluation_generator
+        import json
+        
+        generator = get_evaluation_generator()
+        
+        # Prepare strategy context for the prompt
+        strategy_context = json.dumps({
+            "original_query": strategy.get("original_query", "software engineer role"),
+            "focus_areas": strategy.get("profile_evaluation_context", {}).get("focus_areas", []),
+            "quality_indicators": strategy.get("profile_evaluation_context", {}).get("quality_indicators", []),
+            "ideal_candidate": strategy.get("profile_evaluation_context", {}).get("ideal_candidate_description", ""),
+            "deal_breakers": strategy.get("profile_evaluation_context", {}).get("deal_breakers", [])
+        }, indent=2)
+        
+        result = generator(prompt_kwargs={
+            "strategy_context": strategy_context,
+            "profile_data": json.dumps(profile_data, indent=2)
+        })
+        
+        if hasattr(result, 'data') and result.data:
+            return {
+                "original_profile": profile_data,
+                "llm_evaluation": result.data,
+                "evaluation_method": "adalflow_strategy_based"
+            }
+        else:
+            return create_fallback_evaluation(profile_data, strategy)
+            
+    except Exception as e:
+        print(f"Profile evaluation failed: {e}")
+        return create_fallback_evaluation(profile_data, strategy)
+
+def create_fallback_evaluation(profile_data: Dict[str, Any], strategy: Dict[str, Any]) -> Dict[str, Any]:
+    """Fallback evaluation when LLM is unavailable"""
+    # Basic scoring based on profile completeness and relevance
+    score = 5.0  # Base score
+    
+    # Adjust based on profile quality
+    if profile_data.get("experiences") and len(profile_data["experiences"]) > 0:
+        score += 2.0
+    if profile_data.get("education") and len(profile_data["education"]) > 0:
+        score += 1.0
+    if profile_data.get("about") and len(profile_data.get("about", "")) > 100:
+        score += 1.0
+    
+    recommendation = "maybe"
+    if score >= 8.0:
+        recommendation = "strong_yes"
+    elif score >= 7.0:
+        recommendation = "yes"
+    elif score < 5.0:
+        recommendation = "no"
+    
+    return {
+        "original_profile": profile_data,
+        "llm_evaluation": {
+            "evaluation_summary": {
+                "overall_recommendation": recommendation,
+                "overall_score": f"{score}/10",
+                "confidence_level": "low",
+                "summary_reasoning": "Fallback evaluation based on profile completeness"
+            },
+            "detailed_scores": {
+                "role_fit": {"score": "6.0", "reasoning": "Unable to assess without LLM"},
+                "experience_quality": {"score": "6.0", "reasoning": "Basic profile completeness check"},
+                "technical_competency": {"score": "6.0", "reasoning": "Unable to assess without LLM"},
+                "career_trajectory": {"score": "6.0", "reasoning": "Unable to assess without LLM"},
+                "cultural_fit_indicators": {"score": "6.0", "reasoning": "Unable to assess without LLM"}
+            },
+            "key_strengths": ["Profile data available"],
+            "areas_of_concern": ["Unable to perform detailed evaluation"],
+            "interview_focus_areas": ["General role fit", "Technical competency"]
+        },
+        "evaluation_method": "fallback_basic_scoring"
+    }
+
 # Function tools for agent
 ExtractCompleteProfileTool = FunctionTool(fn=extract_complete_profile)
+ExtractCurrentProfileTool = FunctionTool(fn=extract_current_profile)
