@@ -3,6 +3,7 @@ from .web_nav import js as run_js
 from typing import Dict, Any, List
 import json
 from datetime import datetime
+import traceback
 
 PROFILE_JS = r"""
 (() => {
@@ -28,14 +29,48 @@ PROFILE_JS = r"""
     });
   };
   
-  // Extract basic info using proven selectors
-  const name = grab('h1, .ph5 h1');
-  const headline = grab('.text-body-medium.break-words, .ph5 .text-body-medium');
-  const location = grab('.text-body-small.inline.t-black--light.break-words') ||
-                  Array.from(document.querySelectorAll('span, div'))
-                    .map(x => x.textContent?.trim())
-                    .find(t => t && /^[A-Za-z\s,]+,\s*[A-Za-z\s]+$/.test(t) && t.length < 100) || 
-                  null;
+  // Extract basic info using proven selectors (simplified from working version)
+  // ---------- BASIC INFO: Name & Headline ----------
+
+  const firstText = sels => {
+    for (const s of sels) {
+      const t = grab(s);
+      if (t) return t;
+    }
+    return null;
+  };
+
+  const name = firstText([
+    'h1.inline.t-24.v-align-middle.break-words', // primary selector
+    'h1',                                        // generic fallback
+    '.ph5 h1'                                    // section-based fallback
+  ]);
+
+  const headline = firstText([
+    'div.text-body-medium.break-words',          // primary selector
+    '.ph5 .text-body-medium',                    // section-based fallback
+    '.pv-top-card--list .text-body-medium',      // legacy layout
+    '.pv-top-card__headline',                    // alternative layout
+    '[data-testid="profile-headline"]',          // test-id selector
+    '.artdeco-entity-lockup__subtitle',          // lockup layout
+    'main .text-body-medium'                     // last-resort generic
+  ]);
+
+    // Debug logging
+    console.log('Profile extraction debug:', {
+        name: name || 'NAME_NOT_FOUND',
+        headline: headline || 'HEADLINE_NOT_FOUND',
+        url: window.location.href,
+        page_title: document.title
+    });  
+    
+    const location = grab('.text-body-small.inline.t-black--light.break-words') ||
+        grab('.pv-text-details__left-panel .text-body-small') ||
+        grab('.text-body-small') ||
+        Array.from(document.querySelectorAll('span, div'))
+          .map(x => x.textContent?.trim())
+          .find(t => t && /^[A-Za-z\s,]+,\s*[A-Za-z\s]+$/.test(t) && t.length < 100) || 
+        null;
   
   // Extract About section - uses .ph5 .pv3 containers (from analysis)
   let about = null;
@@ -541,7 +576,7 @@ def extract_profile() -> Dict[str, Any]:
         
     except Exception as e:
         return {
-            "error": f"Profile extraction failed: {str(e)}",
+            "error": f"Profile extraction failed: {traceback.format_exc()}",
             "extraction_timestamp": datetime.now().isoformat(),
             "extraction_method": "dom_based_enhanced",
             "extraction_success": False
