@@ -126,18 +126,31 @@ class StreamingHandler:
         if extraction_success:
             self.candidates_found += 1
     
-    def log_completion(self, total_candidates: int, success_count: int):
-        """Log agent completion"""
-        duration = (datetime.now() - self.start_time).total_seconds()
+    def log_completion(self, final_results: List[Dict[str, Any]]):
+        """Log workflow completion with final results"""
+        self.candidates_found = len(final_results)
+        self.status = "completed"
+        self.current_action = "workflow_complete"
         
-        self.log_step("completion", {
-            "action": "workflow_complete", 
-            "total_candidates_found": total_candidates,
-            "successful_extractions": success_count,
-            "total_steps": self.step_count,
-            "duration_seconds": duration,
-            "success_rate": success_count / max(total_candidates, 1) * 100
-        }, "completed")
+        details = {
+            "total_candidates": len(final_results),
+            "candidates": [{"name": r.get("name", "Unknown"), "url": r.get("url", "")} 
+                          for r in final_results[:5]]  # Show first 5
+        }
+        
+        self.log_step("completion", details, "completed")
+    
+    def log_outreach_evaluation(self, outreach_summary: Dict[str, Any]):
+        """Log outreach evaluation results"""
+        details = {
+            "total_evaluated": outreach_summary.get("total_evaluated", 0),
+            "recommended_for_outreach": outreach_summary.get("recommended_for_outreach", 0),
+            "outreach_rate": outreach_summary.get("outreach_rate", "0%"),
+            "outreach_file": outreach_summary.get("saved_to", "Not saved")
+        }
+        
+        self.log_step("outreach_evaluation", details, "completed")
+        print(f"📨 Outreach evaluation complete: {details['recommended_for_outreach']}/{details['total_evaluated']} candidates recommended")
     
     def log_error(self, error_type: str, error_message: str, context: Optional[Dict[str, Any]] = None):
         """Log an error that occurred"""

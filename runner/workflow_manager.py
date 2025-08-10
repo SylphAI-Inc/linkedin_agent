@@ -10,6 +10,7 @@ import json
 from tools.strategy_generator import StrategyGenerator
 from src.linkedin_agent import LinkedInAgent
 from utils.role_prompts import RolePromptBuilder
+from config import AgentConfig
 
 
 class LinkedInWorkflowManager:
@@ -27,6 +28,7 @@ class LinkedInWorkflowManager:
         self.strategy_generator = StrategyGenerator()
         self.strategy = {}
         self.results = []
+        self.config = AgentConfig()  # Initialize agent config
         
     def create_recruitment_strategy(self) -> Dict[str, Any]:
         """Step 1: Create comprehensive search strategy (DISABLED - not in original flow)"""
@@ -94,6 +96,15 @@ class LinkedInWorkflowManager:
             if len(candidates) == 0:
                 print("🔍 No candidates from final answer, trying URL re-extraction...")
                 candidates = self._retry_extraction_from_urls(result)
+            
+            # Auto-evaluate candidates for outreach if we have extracted profiles
+            if len(candidates) > 0 and progress_tracker and self.config.enable_outreach_evaluation:
+                try:
+                    print("📋 Evaluating candidates for outreach...")
+                    outreach_summary = self._evaluate_candidates_for_outreach(candidates)
+                    progress_tracker.log_outreach_evaluation(outreach_summary)
+                except Exception as outreach_error:
+                    print(f"⚠️  Outreach evaluation failed: {outreach_error}")
             
             if progress_tracker:
                 progress_tracker.log_completion(candidates)
@@ -190,6 +201,45 @@ class LinkedInWorkflowManager:
                 "txt_file": "Error: Could not save",
                 "candidates_count": len(candidates)
             }
+    
+    def _evaluate_candidates_for_outreach(self, candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Evaluate extracted candidates for outreach and generate personalized messages"""
+        try:
+            from tools.candidate_outreach import bulk_evaluate_candidates_for_outreach
+            
+            # Extract the profile data for evaluation
+            candidate_profiles = []
+            for candidate in candidates:
+                if isinstance(candidate, dict) and 'profile_details' in candidate:
+                    profile_data = candidate['profile_details']
+                    # Add search info for context
+                    if 'search_info' in candidate:
+                        profile_data['search_context'] = candidate['search_info']
+                    candidate_profiles.append(profile_data)
+                elif isinstance(candidate, dict) and 'profile_data' in candidate:
+                    candidate_profiles.append(candidate['profile_data'])
+                else:
+                    candidate_profiles.append(candidate)
+            
+            # Evaluate candidates for outreach
+            outreach_results = bulk_evaluate_candidates_for_outreach(
+                candidates=candidate_profiles,
+                position_title=self.query,
+                location=self.location,
+                required_technologies=["Python", "JavaScript", "React", "Node.js", "AWS"],
+                experience_level="3-8 years"
+            )
+            
+            # Save outreach results
+            from tools.candidate_outreach import save_outreach_results
+            outreach_file = save_outreach_results(outreach_results)
+            outreach_results['saved_to'] = outreach_file
+            
+            return outreach_results
+            
+        except Exception as e:
+            print(f"❌ Outreach evaluation error: {e}")
+            return {"error": str(e), "candidates_evaluated": 0}
     
     def _build_strategy_enhanced_prompt(self) -> str:
         """Build prompt enhanced with strategy context - simplified to match original"""
@@ -312,7 +362,7 @@ class LinkedInWorkflowManager:
         
         try:
             from tools.people_search import search_people
-            from tools.profile_extractor import extract_complete_profile
+            from tools.profile_extractor import extract_profile  # Fixed import
             from tools.web_nav import go
             import time
             
@@ -332,7 +382,7 @@ class LinkedInWorkflowManager:
                         go(candidate["url"])
                         time.sleep(0.5)  # Wait for page load
                         
-                        profile_data = extract_complete_profile()
+                        profile_data = extract_profile()  # Fixed function call
                         
                         # Validate profile data
                         if isinstance(profile_data, dict) and profile_data.get('name'):
@@ -434,7 +484,7 @@ class LinkedInWorkflowManager:
         candidates = []
         
         try:
-            from tools.extract_profile import extract_profile
+            from tools.profile_extractor import extract_profile  # Fixed import path
             from tools.web_nav import go, get_current_url
             import time
             

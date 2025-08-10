@@ -13,6 +13,12 @@ from tools.profile_extractor import ExtractCompleteProfileTool
 # from tools.candidate_scorer import ScoreCandidateTool, ScoreMultipleCandidatesTool  # Commented out - using new workflow
 from tools.smart_search import SmartCandidateSearchTool, GetCollectedCandidatesTool, ClearCandidateCollectionTool
 from tools.targeted_extraction import ExtractCandidateProfilesTool, GetExtractionSummaryTool
+from tools.candidate_outreach import (
+    EvaluateCandidateForOutreachTool, 
+    BulkEvaluateCandidatesForOutreachTool,
+    GetOutreachSummaryTool,
+    SaveOutreachResultsTool
+)
 
 
 class LinkedInAgent:
@@ -62,6 +68,11 @@ class LinkedInAgent:
                 ClearCandidateCollectionTool,  # Clear candidate collection
                 ExtractCandidateProfilesTool,  # Extract profiles from URLs
                 GetExtractionSummaryTool,  # Extraction status summary
+                # Outreach tools
+                EvaluateCandidateForOutreachTool,  # Evaluate single candidate for outreach
+                BulkEvaluateCandidatesForOutreachTool,  # Evaluate multiple candidates
+                GetOutreachSummaryTool,  # Get outreach evaluation summary
+                SaveOutreachResultsTool,  # Save outreach results to file
             ]
 
         # Initialize Agent and Runner

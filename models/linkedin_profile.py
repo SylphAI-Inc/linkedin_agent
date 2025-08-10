@@ -323,3 +323,74 @@ class CandidateScore(DataClass):
         default="",
         metadata={"desc": "Detailed explanation of the scoring and recommendation"}
     )
+
+
+@dataclass
+class CandidateOutreachEvaluation(DataClass):
+    """Outreach evaluation results for candidates"""
+    candidate_name: str = field(metadata={"desc": "Candidate name"})
+    
+    overall_outreach_score: float = field(metadata={"desc": "Overall outreach suitability score (0-50)"})
+    
+    # Individual evaluation components
+    technical_fit_score: float = field(
+        default=0.0,
+        metadata={"desc": "Technical skills alignment score (0-10)"}
+    )
+    
+    experience_relevance_score: float = field(
+        default=0.0,
+        metadata={"desc": "Experience relevance score (0-10)"}
+    )
+    
+    career_progression_score: float = field(
+        default=0.0,
+        metadata={"desc": "Career growth trajectory score (0-10)"}
+    )
+    
+    cultural_fit_score: float = field(
+        default=0.0,
+        metadata={"desc": "Cultural and company fit score (0-10)"}
+    )
+    
+    availability_likelihood_score: float = field(
+        default=0.0,
+        metadata={"desc": "Likelihood of being open to opportunities (0-10)"}
+    )
+    
+    # Outreach decision
+    recommend_outreach: bool = field(
+        default=False,
+        metadata={"desc": "Whether to recommend outreach to this candidate"}
+    )
+    
+    outreach_priority: str = field(
+        default="Low",
+        metadata={"desc": "Outreach priority level (High, Medium, Low)"}
+    )
+    
+    # Detailed analysis
+    key_strengths: List[str] = field(
+        default_factory=list,
+        metadata={"desc": "Key strengths that make this candidate attractive"}
+    )
+    
+    potential_concerns: List[str] = field(
+        default_factory=list,
+        metadata={"desc": "Potential concerns or red flags"}
+    )
+    
+    outreach_angle: str = field(
+        default="",
+        metadata={"desc": "Recommended approach/angle for outreach message"}
+    )
+    
+    personalized_message: str = field(
+        default="",
+        metadata={"desc": "Generated personalized outreach message"}
+    )
+    
+    evaluation_reasoning: str = field(
+        default="",
+        metadata={"desc": "Detailed explanation of the evaluation and outreach recommendation"}
+    )
