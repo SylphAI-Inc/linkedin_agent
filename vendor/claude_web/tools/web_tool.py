@@ -152,7 +152,8 @@ class WebTool:
             doc = self.cmd("DOM.getDocument")
             root = doc["result"]["root"]["nodeId"]
             el = self.cmd("DOM.querySelector", {"nodeId": root, "selector": selector})
-            if el["result"].get("nodeId"):
+            # Handle CDP response structure - check if result exists and has nodeId
+            if el and "result" in el and el["result"] and el["result"].get("nodeId"):
                 return True
             time.sleep(0.5)
         return False

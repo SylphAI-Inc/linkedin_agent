@@ -84,13 +84,16 @@ class CDPConfig:
             # Start Chrome with CDP
             subprocess.Popen([
                 "chromium-browser",
+                "--headless",
                 f"--remote-debugging-port={self.port}",
                 f"--user-data-dir=./chrome_data-{self.port}",
                 "--no-first-run",
                 "--no-default-browser-check", 
                 "--disable-web-security",
                 "--disable-features=VizDisplayCompositor",
-                "--remote-allow-origins=*"
+                "--remote-allow-origins=*",
+                "--no-sandbox",
+                "--disable-dev-shm-usage"
             ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             # Wait for startup

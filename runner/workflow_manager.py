@@ -30,8 +30,7 @@ class LinkedInWorkflowManager:
         
     def create_recruitment_strategy(self) -> Dict[str, Any]:
         """Step 1: Create comprehensive search strategy (DISABLED - not in original flow)"""
-        print(f"🎯 Skipping strategy creation - using original flow approach")
-        print(f"📍 Location: {self.location}")
+        print("🔍 Creating recruitment strategy...")
         
         try:
             self.strategy = self.strategy_generator.create_search_strategy(
@@ -68,7 +67,6 @@ class LinkedInWorkflowManager:
         """Step 3: Execute the complete search workflow with robust error handling"""
         print(f"🔍 Starting recruitment workflow...")
         print(f"📊 Target: {self.limit} candidates")
-        exit(1)
         
         candidates = []
         
@@ -80,6 +78,9 @@ class LinkedInWorkflowManager:
             
             # Execute agent workflow
             result = agent.call(query=prompt)
+            
+            # Print agent execution steps (same format as original runner)
+            self._print_agent_execution_steps(result)
             
             # Process results based on agent execution
             candidates = self._extract_candidates_from_result(result)
@@ -98,6 +99,7 @@ class LinkedInWorkflowManager:
                 progress_tracker.log_completion(candidates)
             
             self.results = candidates
+            print(f"\n📊 Total candidates extracted from agent: {len(candidates)}")
             print(f"✅ Workflow completed: {len(candidates)} candidates found")
             
             return candidates
@@ -119,6 +121,50 @@ class LinkedInWorkflowManager:
             # Return any partial results we managed to extract
             print(f"📊 Returning {len(candidates)} partial results")
             return candidates
+    
+    def _print_agent_execution_steps(self, result) -> None:
+        """Print agent execution steps using same format as original runner"""
+        try:
+            # Define steps before conditional block to avoid variable scoping issues
+            steps = getattr(result, "step_history", getattr(result, "steps", []))
+            
+            print("Run complete. Steps:")
+            
+            if not steps:
+                print("No steps recorded - agent may have encountered parsing issues")
+            print(f"Result: {result}")
+            
+            # Extract candidates from agent steps (same logic as original)
+            for i, s in enumerate(steps, 1):
+                print(i, getattr(s, 'thought', getattr(s, 'action', 'step')))
+                
+                # Handle Function objects from AdalFlow - check step structure
+                # Steps have: step, action (Function), function (Function), observation
+                action = getattr(s, 'action', None)
+                function = getattr(s, 'function', None)
+                observation = getattr(s, 'observation', None)
+                
+                # Extract tool info from action or function
+                func_obj = action or function
+                if func_obj:
+                    tool_name = getattr(func_obj, 'name', None)
+                    tool_kwargs = getattr(func_obj, 'kwargs', {})
+                    tool_args = getattr(func_obj, 'args', [])
+                else:
+                    tool_name = getattr(s, 'name', getattr(s, 'tool_name', None))
+                    tool_args = getattr(s, 'args', getattr(s, 'tool_args', []))
+                    tool_kwargs = getattr(s, 'kwargs', getattr(s, 'tool_kwargs', {}))
+                
+                tool_result = observation
+                
+                if tool_name:
+                    print("  ->", tool_name, tool_kwargs or tool_args, "=>", (str(tool_result)[:120] if tool_result is not None else None))
+                
+                import time
+                time.sleep(0.1)
+                
+        except Exception as e:
+            print(f"Error printing agent steps: {e}")
     
     def save_results(self, candidates: List[Dict[str, Any]], output_dir: str = "results") -> Dict[str, str]:
         """Step 4: Save recruitment results with error handling"""
@@ -168,14 +214,17 @@ class LinkedInWorkflowManager:
         return {
             "headline_analysis": {
                 "target_job_titles": [self.query.lower()],
-                "alternative_titles": self.query.lower().split(),
-                "seniority_keywords": ["senior", "staff", "principal", "lead"],
-                "company_indicators": ["@", "at"],
-                "tech_stack_signals": ["python", "react", "java", "aws"],
-                "role_relevance_keywords": self.query.lower().split()
+                "alternative_titles": ["software developer", "full stack developer", "backend engineer", "frontend engineer"],
+                "seniority_keywords": ["senior", "lead", "staff", "principal"],
+                "company_indicators": ["google", "facebook", "apple", "amazon", "microsoft", "netflix", "uber", "airbnb"],
+                "tech_stack_signals": ["python", "java", "javascript", "react", "node.js", "aws", "docker", "kubernetes"]
+            },
+            "search_filtering": {
+                "negative_headline_patterns": ["intern", "student"],  # Avoid overly broad patterns
+                "minimum_headline_score": 2.0  # Match smart_candidate_search default
             },
             "profile_evaluation_context": {
-                "focus_areas": ["work experience", "technical skills", "career progression"],
+                "focus_areas": ["Technical skills and tech stack", "Work experience and project impact", "Education and certifications", "Contributions to open source or community"],
                 "quality_indicators": ["relevant experience", "good companies"],
                 "ideal_candidate_description": f"Experienced {self.query} with relevant background"
             },

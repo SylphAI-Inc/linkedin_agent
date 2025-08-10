@@ -113,7 +113,7 @@ def get_evaluation_generator():
     return _evaluation_generator
 
 def evaluate_headline_with_strategy(headline: str, strategy: Dict[str, Any]) -> Dict[str, Any]:
-    """Evaluate candidate headline using strategy - no LLM needed"""
+    """Evaluate candidate headline using strategy - handles both agent and fallback formats"""
     if not headline or not strategy:
         return {"score": 0.0, "worth_extracting": False, "signals": []}
     
@@ -121,10 +121,27 @@ def evaluate_headline_with_strategy(headline: str, strategy: Dict[str, Any]) -> 
     score = 0.0
     signals = []
     
-    # Job title relevance
-    target_titles = strategy.get("headline_analysis", {}).get("target_job_titles", [])
-    alternative_titles = strategy.get("headline_analysis", {}).get("alternative_titles", [])
+    # Handle both strategy formats: agent format and expected format
+    if "headline_analysis" in strategy:
+        # Expected format from fallback strategy
+        target_titles = [title.lower() for title in strategy.get("headline_analysis", {}).get("target_job_titles", [])]
+        alternative_titles = [title.lower() for title in strategy.get("headline_analysis", {}).get("alternative_titles", [])]
+        seniority_keywords = [kw.lower() for kw in strategy.get("headline_analysis", {}).get("seniority_keywords", [])]
+        company_indicators = [comp.lower() for comp in strategy.get("headline_analysis", {}).get("company_indicators", [])]
+        tech_signals = [tech.lower() for tech in strategy.get("headline_analysis", {}).get("tech_stack_signals", [])]
+        negative_patterns = [pattern.lower() for pattern in strategy.get("search_filtering", {}).get("negative_headline_patterns", [])]
+        min_score = strategy.get("search_filtering", {}).get("minimum_headline_score", 3.0)
+    else:
+        # Agent format - convert to expected format
+        target_titles = [title.lower() for title in strategy.get("primary_titles", [])]
+        alternative_titles = [title.lower() for title in strategy.get("alternative_titles", [])]
+        seniority_keywords = [kw.lower() for kw in strategy.get("seniority_indicators", [])]
+        company_indicators = [comp.lower() for comp in strategy.get("target_companies", [])]
+        tech_signals = [tech.lower() for tech in strategy.get("key_technologies", [])]
+        negative_patterns = [pattern.lower() for pattern in strategy.get("negative_patterns", [])]
+        min_score = 2.0  # Default for agent format
     
+    # Job title relevance
     if any(title in headline_lower for title in target_titles):
         score += 3.0
         signals.append("exact_title_match")
@@ -133,31 +150,25 @@ def evaluate_headline_with_strategy(headline: str, strategy: Dict[str, Any]) -> 
         signals.append("alternative_title_match")
     
     # Seniority indicators
-    seniority_keywords = strategy.get("headline_analysis", {}).get("seniority_keywords", [])
     if any(keyword in headline_lower for keyword in seniority_keywords):
         score += 1.5
         signals.append("seniority_indicated")
     
     # Company indicators
-    company_indicators = strategy.get("headline_analysis", {}).get("company_indicators", [])
     if any(indicator in headline_lower for indicator in company_indicators):
         score += 1.0
         signals.append("company_mentioned")
     
     # Tech stack signals
-    tech_signals = strategy.get("headline_analysis", {}).get("tech_stack_signals", [])
     matching_tech = [tech for tech in tech_signals if tech in headline_lower]
     if matching_tech:
         score += len(matching_tech) * 0.5
         signals.append(f"tech_stack: {matching_tech}")
     
     # Check for negative patterns
-    negative_patterns = strategy.get("search_filtering", {}).get("negative_headline_patterns", [])
     if any(pattern in headline_lower for pattern in negative_patterns):
         score -= 2.0
         signals.append("negative_pattern_detected")
-    
-    min_score = strategy.get("search_filtering", {}).get("minimum_headline_score", 3.0)
     
     return {
         "score": score,
