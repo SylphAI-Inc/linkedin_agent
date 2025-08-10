@@ -30,7 +30,7 @@ def extract_candidate_profiles(
     """
     
     collector = get_url_collector()
-    candidates = collector.get_candidates()
+    candidates = collector.get_candidates(sort_by_score=True)  # Get candidates sorted by score
     
     if not candidates:
         return {
@@ -41,9 +41,12 @@ def extract_candidate_profiles(
             "results": []
         }
     
-    # Limit candidates if specified
+    # Limit candidates if specified - now getting the TOP candidates by score
     if candidate_limit:
         candidates = candidates[:candidate_limit]
+        print(f"🎯 Selected top {len(candidates)} candidates by headline score")
+        if candidates:
+            print(f"📊 Score range: {candidates[0].get('headline_score', 0):.1f} (highest) to {candidates[-1].get('headline_score', 0):.1f} (lowest)")
     
     print(f"🎯 Starting targeted extraction for {len(candidates)} candidates")
     print(f"⏱️  Delay between extractions: {delay_between_extractions}s")

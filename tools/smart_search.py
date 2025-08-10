@@ -61,9 +61,16 @@ class CandidateURLCollector:
         """Get total number of quality candidates collected"""
         return len(self.quality_candidates)
     
-    def get_candidates(self) -> List[Dict[str, Any]]:
-        """Get all collected quality candidates"""
-        return self.quality_candidates.copy()
+    def get_candidates(self, sort_by_score: bool = True) -> List[Dict[str, Any]]:
+        """Get all collected quality candidates, optionally sorted by score"""
+        candidates = self.quality_candidates.copy()
+        
+        if sort_by_score:
+            # Sort by headline_score descending (highest scores first)
+            candidates.sort(key=lambda x: x.get('headline_score', 0), reverse=True)
+            print(f"📊 Sorted {len(candidates)} candidates by headline score (highest first)")
+        
+        return candidates
 
 
 # Global collector instance for the session
@@ -309,13 +316,15 @@ def _extract_candidate_data_from_page(strategy: Dict[str, Any], min_score: float
         return []
 
 
-def get_collected_candidates(limit: int = None) -> Dict[str, Any]:
-    """Get all collected quality candidates"""
+def get_collected_candidates(limit: int = None, sort_by_score: bool = True) -> Dict[str, Any]:
+    """Get all collected quality candidates, sorted by score"""
     collector = get_url_collector()
-    candidates = collector.get_candidates()
+    candidates = collector.get_candidates(sort_by_score=sort_by_score)
     
     if limit:
         candidates = candidates[:limit]
+        if sort_by_score and candidates:
+            print(f"🎯 Selected top {len(candidates)} candidates (scores: {candidates[0].get('headline_score', 0):.1f} to {candidates[-1].get('headline_score', 0):.1f})")
     
     return {
         "total_count": collector.get_candidate_count(),
