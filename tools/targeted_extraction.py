@@ -8,7 +8,7 @@ import time
 
 from adalflow.core.func_tool import FunctionTool
 from .web_nav import go as nav_go, wait as nav_wait
-from .extract_profile import extract_profile  # Use existing extraction function
+from .profile_extractor import extract_profile  # Use existing extraction function
 from .smart_search import get_url_collector
 
 
@@ -167,8 +167,14 @@ def _validate_extracted_profile(profile_data: Dict[str, Any], candidate_info: Di
         valid = False
         return {"valid": False, "issues": issues}
     
+    # Handle both direct profile data and wrapped profile data structures
+    # Some extraction methods return wrapped data with 'profile_data' key
+    actual_profile_data = profile_data
+    if 'profile_data' in profile_data and isinstance(profile_data['profile_data'], dict):
+        actual_profile_data = profile_data['profile_data']
+    
     # Basic data presence checks
-    extracted_name = profile_data.get('name', '').strip()
+    extracted_name = actual_profile_data.get('name', '').strip()
     expected_name = candidate_info.get('name', '').strip()
     
     if not extracted_name:
@@ -181,7 +187,7 @@ def _validate_extracted_profile(profile_data: Dict[str, Any], candidate_info: Di
             # Don't mark as invalid for name mismatch - could be LinkedIn display variations
     
     # Check headline presence
-    extracted_headline = profile_data.get('headline', '').strip()
+    extracted_headline = actual_profile_data.get('headline', '').strip()
     expected_headline = candidate_info.get('headline', '').strip()
     
     if not extracted_headline:
@@ -191,12 +197,12 @@ def _validate_extracted_profile(profile_data: Dict[str, Any], candidate_info: Di
     # Check for basic profile completeness
     required_fields = ['name', 'url']
     for field in required_fields:
-        if not profile_data.get(field):
+        if not actual_profile_data.get(field):
             issues.append(f"Missing required field: {field}")
             valid = False
     
     # Check URL consistency
-    extracted_url = profile_data.get('url', '')
+    extracted_url = actual_profile_data.get('url', '')
     expected_url = candidate_info.get('url', '') or candidate_info.get('normalized_url', '')
     
     if extracted_url and expected_url:
