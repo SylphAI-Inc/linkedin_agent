@@ -115,24 +115,28 @@ def smart_candidate_search(
     candidates_found = 0
     
     try:
+        # Navigate to search page once
+        if pages_searched == 0:
+            search_url = f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(search_query)}"
+            print(f"🌐 Navigating to: {search_url}")
+            nav_go(search_url)
+            nav_wait(3)  # Wait for initial page load
+        
         for page in range(page_limit):
             print(f"📖 Searching page {page + 1}/{page_limit}")
             
-            # Navigate to search page
-            if page == 0:
-                search_url = f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(search_query)}"
-                # Location already included in search_query, no need for geoUrn
-            else:
-                # For subsequent pages, LinkedIn uses start parameter
-                start_index = page * 10
-                search_url = f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(search_query)}&start={start_index}"
-                # Location already included in search_query, no need for geoUrn
+            # For pages beyond first, scroll down to load more results (LinkedIn's infinite scroll)
+            if page > 0:
+                print(f"   📜 Scrolling to load more results...")
+                # Scroll to bottom to trigger more results
+                run_js("window.scrollTo(0, document.body.scrollHeight);")
+                nav_wait(2)  # Wait for new results to load
+                
+                # Scroll back up a bit to ensure all results are in view
+                run_js("window.scrollTo(0, document.body.scrollHeight * 0.8);")
+                nav_wait(1)
             
-            nav_go(search_url)
-            
-            # Wait for LinkedIn search results to load
-            from .linkedin_selectors import SEARCH_RESULTS_CARDS
-            nav_wait(3)  # Wait for page load
+            # No need to navigate again after first page
             
             # Check if we have search results on the page
             print(f"   🔍 Checking for search results...")

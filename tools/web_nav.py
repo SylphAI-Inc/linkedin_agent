@@ -54,9 +54,16 @@ def wait(selector: str, timeout: float = 10.0) -> bool:
     return w.wait(selector, timeout)
 
 
+def get_current_url() -> str:
+    """Get the current page URL"""
+    w = _ensure()
+    return w.js("window.location.href") or ""
+
+
 GoTool = FunctionTool(fn=go)
 ClickTool = FunctionTool(fn=click)
 TypeTool = FunctionTool(fn=type_)
 KeyTool = FunctionTool(fn=key)
 JsTool = FunctionTool(fn=js)
 WaitTool = FunctionTool(fn=wait)
+GetCurrentUrlTool = FunctionTool(fn=get_current_url)
