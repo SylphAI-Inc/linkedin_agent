@@ -93,7 +93,16 @@ class CDPConfig:
                 "--disable-features=VizDisplayCompositor",
                 "--remote-allow-origins=*",
                 "--no-sandbox",
-                "--disable-dev-shm-usage"
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-software-rasterizer",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+                "--disable-extensions",
+                "--enable-unsafe-swiftshader",
+                "--no-zygote",
+                "--use-gl=disabled"
             ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             # Wait for startup

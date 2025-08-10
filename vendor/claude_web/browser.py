@@ -60,6 +60,7 @@ def start() -> None:
         "--remote-allow-origins=*",
         "--no-first-run",
         "--no-default-browser-check",
+        "--enable-unsafe-swiftshader",  # Fix WebGL deprecation warnings
     ]
     if cfg.headless:
         args += [
