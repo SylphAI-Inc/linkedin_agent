@@ -132,8 +132,13 @@ class StreamingHandler:
         self.status = "completed"
         self.current_action = "workflow_complete"
         
+        # Count successful extractions (candidates with profile_details)
+        successful_extractions = len([c for c in final_results if c.get("profile_details")])
+        
         details = {
-            "total_candidates": len(final_results),
+            "total_candidates_found": len(final_results),  # Fixed key name
+            "successful_extractions": successful_extractions,  # Added expected key
+            "duration_seconds": (datetime.now() - self.start_time).total_seconds(),  # Added duration
             "candidates": [{"name": r.get("name", "Unknown"), "url": r.get("url", "")} 
                           for r in final_results[:5]]  # Show first 5
         }
@@ -318,10 +323,21 @@ class AgentProgressTracker:
     
     def log_completion(self, candidates: List[Dict[str, Any]]):
         if self.streamer:
-            successful = len([c for c in candidates if c.get("profile_details")])
-            self.streamer.log_completion(len(candidates), successful)
+            self.streamer.log_completion(candidates)  # Fixed: pass candidates directly
             print("=" * 60)
             print(f"✅ Workflow completed successfully!")
+    
+    def log_outreach_evaluation(self, outreach_summary: Dict[str, Any]):
+        """Log outreach evaluation results"""
+        if self.streamer:
+            self.streamer.log_outreach_evaluation(outreach_summary)
+        
+        # Also print a summary to console
+        total = outreach_summary.get("total_evaluated", 0)
+        recommended = outreach_summary.get("recommended_for_outreach", 0)
+        rate = outreach_summary.get("outreach_rate", "0%")
+        
+        print(f"📨 Outreach evaluation complete: {recommended}/{total} candidates recommended ({rate})")
     
     def log_error(self, error_type: str, message: str, context: Optional[Dict] = None):
         if self.streamer:
