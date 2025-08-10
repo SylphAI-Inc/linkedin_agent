@@ -37,6 +37,7 @@ class ModelConfig:
 @dataclass
 class AgentConfig:
     max_steps: int = int(os.getenv("AGENT_MAX_STEPS", "20"))
+    enable_outreach_evaluation: bool = os.getenv("ENABLE_OUTREACH_EVALUATION", "true").lower() == "true"
 
 
 def _is_port_in_use(port: int) -> bool:
