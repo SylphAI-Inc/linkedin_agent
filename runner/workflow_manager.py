@@ -248,55 +248,21 @@ class LinkedInWorkflowManager:
                 func_obj = action or function
                 func_name = getattr(func_obj, 'name', None) if func_obj else None
                 
-                # Check for profile extraction functions
-                if func_name in ['extract_profile', 'extract_complete_profile']:
-                    # Handle individual profile extraction
-                    if observation and isinstance(observation, dict):
-                        profile_data = observation
-                        if profile_data.get('name'):
-                            # Try to get URL from profile_data itself first (most reliable)
-                            url = profile_data.get('url', 'Unknown URL')
-                            
-                            # If no URL in profile data, try step history
-                            if url == 'Unknown URL':
-                                url = self._extract_url_from_step_history(result.step_history, step)
-                            
-                            # Create unique identifier for deduplication
-                            # Use URL if available, otherwise use name + headline combination
-                            if url != 'Unknown URL':
-                                profile_id = url.strip().rstrip('/').lower()
-                            else:
-                                profile_id = f"{profile_data.get('name', '').lower()}_{profile_data.get('headline', '').lower()}"
-                            
-                            # Skip if we've already seen this profile
-                            if profile_id in seen_profiles:
-                                print(f"🔄 Skipping duplicate profile: {profile_data.get('name', 'Unknown')} ({url})")
-                                continue
-                            
-                            seen_profiles.add(profile_id)
-                            candidates.append({
-                                "search_info": {"url": url},
-                                "profile_details": profile_data
-                            })
-                
-                elif func_name == 'extract_candidate_profiles':
+                if func_name == 'extract_candidate_profiles':
                     # Handle batch profile extraction results
                     if observation and isinstance(observation, dict) and observation.get('results'):
                         batch_results = observation.get('results', [])
                         print(f"🔍 Processing {len(batch_results)} profiles from extract_candidate_profiles")
                         
-                        for profile_data in batch_results:
-                            print(f"Extracted profile data: {profile_data}")
-                            if isinstance(profile_data, dict) and profile_data.get('name'):
+                        for result in batch_results:
+                            print(f"Extracted profile data: {result}")
+                            if isinstance(result, dict) and result.get('profile_data'):
                                 # Try to get URL from profile_data itself first
-                                url = profile_data.get('url', 'Unknown URL')
+                                candidate_info = result.get('candidate_info', {})
+                                profile_data = result.get('profile_data', {})
+                                url = candidate_info.get('url', 'Unknown URL')
                                 
                                 # Create unique identifier for deduplication
-                                if url != 'Unknown URL':
-                                    profile_id = url.strip().rstrip('/').lower()
-                                else:
-                                    profile_id = f"{profile_data.get('name', '').lower()}_{profile_data.get('headline', '').lower()}"
-                                
                                 candidates.append({
                                     "search_info": {"url": url},
                                     "profile_details": profile_data
