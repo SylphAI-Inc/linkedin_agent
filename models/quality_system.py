@@ -39,6 +39,7 @@ class SearchBudget:
     # Extension triggers
     low_quality_threshold: float = 4.0   # Extend if average quality below this
     min_acceptable_candidates: int = 3   # Need at least this many good ones
+    min_heap_capacity_pct: float = 50.0  # Minimum heap capacity utilization before extraction
     
 
 @dataclass
@@ -151,8 +152,20 @@ class CandidateHeap:
         
         return acceptable_count < 3  # Need at least 3 acceptable candidates
     
-    def is_ready_for_extraction(self, min_avg_threshold: float = 5.0, min_candidates: int = 3) -> tuple:
-        """Determine if heap quality is good enough to proceed with profile extraction"""
+    def get_capacity_utilization(self) -> float:
+        """Get heap capacity utilization percentage"""
+        if self.max_size == 0:
+            return 100.0
+        return (len(self.heap) / self.max_size) * 100.0
+    
+    def should_continue_search_for_capacity(self, min_capacity_pct: float = 50.0) -> bool:
+        """Check if we should continue searching to fill heap capacity"""
+        utilization = self.get_capacity_utilization()
+        return utilization < min_capacity_pct
+    
+    def is_ready_for_extraction(self, min_avg_threshold: float = 5.0, min_candidates: int = 3, 
+                               min_capacity_pct: float = 50.0) -> tuple:
+        """Enhanced extraction readiness with capacity utilization check"""
         if len(self.heap) < min_candidates:
             return False, f"insufficient_candidates_{len(self.heap)}"
             
@@ -161,8 +174,13 @@ class CandidateHeap:
         
         if avg_quality < min_avg_threshold:
             return False, f"low_average_quality_{avg_quality:.1f}"
+        
+        # NEW: Check heap capacity utilization
+        capacity_utilization = self.get_capacity_utilization()
+        if capacity_utilization < min_capacity_pct:
+            return False, f"low_heap_utilization_{capacity_utilization:.1f}pct"
             
-        return True, f"quality_ready_avg_{avg_quality:.1f}"
+        return True, f"ready_quality_{avg_quality:.1f}_capacity_{capacity_utilization:.1f}pct"
 
 
 class QualityAnalyzer:

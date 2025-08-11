@@ -88,7 +88,9 @@ def smart_candidate_search(
     min_score_threshold: float = 7.0,
     target_candidate_count: Optional[int] = None,
     quality_mode: str = "adaptive",  # "adaptive", "quality_first", "fast"
-    extraction_quality_gate: float = 5.0  # Minimum heap average to proceed with extraction
+    get_heap_backup: bool = False,  # NEW: Access backup candidates from previous search
+    backup_offset: int = 0,         # NEW: Start position in heap for backup candidates  
+    backup_limit: Optional[int] = None  # NEW: Number of backup candidates to return
 ) -> Dict[str, Any]:
     """
     Smart search for quality candidates using intelligent quality-driven system
@@ -102,11 +104,52 @@ def smart_candidate_search(
         min_score_threshold: Minimum headline score to include candidate
         target_candidate_count: Desired number of candidates (adaptive system may adjust)
         quality_mode: "adaptive" = extend search for quality, "quality_first" = prioritize quality over quantity, "fast" = respect hard limits
-        extraction_quality_gate: Minimum heap average quality to proceed with extraction (0.0 = no gate)
+        get_heap_backup: If True, return backup candidates from existing heap instead of searching
+        backup_offset: Starting position in heap for backup candidates (allows getting candidates beyond top results)
+        backup_limit: Maximum number of backup candidates to return
         
     Returns:
         Dict with top quality candidates, quality metrics, and search decisions
     """
+    
+    # NEW: Handle heap backup mode - return candidates from existing collector
+    if get_heap_backup:
+        print(f"🔄 Accessing heap backup candidates (offset: {backup_offset}, limit: {backup_limit})")
+        
+        collector = get_url_collector()
+        all_candidates = collector.get_candidates(sort_by_score=True)
+        
+        if not all_candidates:
+            return {
+                "success": False,
+                "error": "No candidates in heap backup - perform initial search first",
+                "backup_mode": True,
+                "heap_total": 0,
+                "candidates": []
+            }
+        
+        # Apply offset and limit to get backup candidates
+        backup_candidates = all_candidates[backup_offset:]
+        if backup_limit:
+            backup_candidates = backup_candidates[:backup_limit]
+        
+        print(f"📊 Heap backup: {len(backup_candidates)}/{len(all_candidates)} candidates (offset: {backup_offset})")
+        
+        return {
+            "success": True,
+            "backup_mode": True,
+            "heap_total": len(all_candidates),
+            "candidates_found": len(backup_candidates),
+            "candidates": backup_candidates,
+            "backup_offset": backup_offset,
+            "backup_limit": backup_limit,
+            "quality_stats": {
+                "count": len(backup_candidates),
+                "average": sum(c.get("headline_score", 0) for c in backup_candidates) / len(backup_candidates) if backup_candidates else 0,
+                "backup_source": "url_collector_heap"
+            },
+            "search_decisions": [f"heap_backup_accessed_offset_{backup_offset}"]
+        }
     
     # Initialize quality system components
     thresholds = QualityThresholds(
@@ -145,16 +188,16 @@ def smart_candidate_search(
     search_decisions = []
     
     try:
-        # Main search loop with adaptive extension
-        current_page_limit = start_page + page_limit  # End page = start + limit
+        # Autonomous search loop - continues until thresholds met or hard limits reached
         page = start_page  # Start from specified page
         
         if start_page > 0:
             print(f"🔄 Continuing search from page {start_page + 1} (searched {start_page} pages previously)")
             search_decisions.append(f"continued_from_page_{start_page + 1}")
         
-        while page < current_page_limit:
-            print(f"📖 Searching page {page + 1}/{current_page_limit}")
+        # Internal threshold-based loop - tool decides when to stop
+        while page < budget.max_page_limit:
+            print(f"📖 Searching page {page + 1} (max: {budget.max_page_limit})")
 
             # Navigate to search page with proper pagination
             if page == 0:
@@ -219,35 +262,36 @@ def smart_candidate_search(
             time.sleep(3)
             
             
-            # Make adaptive decisions - include extraction quality gate check
-            if quality_mode == "adaptive" and page >= budget.initial_page_limit:
-                should_extend, reason = quality_analyzer.should_extend_search(current_stats, pages_searched)
+            # Check if search thresholds are met (autonomous decision making)
+            if page >= budget.initial_page_limit:  # Only check after minimum pages
+                should_extend_quality, quality_reason = quality_analyzer.should_extend_search(current_stats, pages_searched)
                 
-                # Also check extraction quality gate
-                extraction_ready = True
-                if extraction_quality_gate > 0.0:
-                    extraction_ready, gate_reason = candidate_heap.is_ready_for_extraction(
-                        min_avg_threshold=extraction_quality_gate,
-                        min_candidates=target_candidate_count or 3
-                    )
-                    if not extraction_ready:
-                        should_extend = True
-                        reason = f"extraction_gate_{gate_reason}"
-                        print(f"   📊 Extraction gate requires more quality: {gate_reason}")
+                # Check capacity utilization
+                capacity_utilization = candidate_heap.get_capacity_utilization()
+                needs_more_capacity = candidate_heap.should_continue_search_for_capacity(budget.min_heap_capacity_pct)
                 
-                if should_extend and current_page_limit < budget.max_page_limit:
-                    old_limit = current_page_limit
-                    current_page_limit = min(current_page_limit + 2, budget.max_page_limit)
-                    search_decisions.append(f"extended_search_{reason}_from_{old_limit}_to_{current_page_limit}")
-                    print(f"   🔄 Extending search: {reason} (pages: {old_limit} → {current_page_limit})")
-                elif not should_extend and extraction_ready:
-                    search_decisions.append(f"quality_sufficient_{reason}")
-                    print(f"   ✅ Quality sufficient: {reason}")
+                # Check minimum candidate count
+                has_enough_candidates = len(candidate_heap.heap) >= (target_candidate_count or 3)
+                
+                # Simple decision: continue if ANY threshold not met
+                if not should_extend_quality and not needs_more_capacity and has_enough_candidates:
+                    search_decisions.append(f"thresholds_met_quality_{current_stats.get('average', 0):.1f}_capacity_{capacity_utilization:.1f}%_count_{len(candidate_heap.heap)}")
+                    print(f"   ✅ All thresholds met: quality={current_stats.get('average', 0):.1f}, capacity={capacity_utilization:.1f}%, count={len(candidate_heap.heap)}")
                     break
-                elif not extraction_ready and current_page_limit >= budget.max_page_limit:
-                    search_decisions.append(f"max_pages_reached_quality_insufficient")
-                    print(f"   ⚠️  Reached max pages but extraction gate not met")
-                    break
+                else:
+                    # Log why continuing (for debugging)
+                    reasons = []
+                    if should_extend_quality:
+                        reasons.append("quality_low")
+                    if needs_more_capacity:
+                        reasons.append(f"capacity_{capacity_utilization:.1f}%")
+                    if not has_enough_candidates:
+                        reasons.append(f"need_{target_candidate_count or 3}_have_{len(candidate_heap.heap)}")
+                    
+                    print(f"   🔄 Continuing search: {', '.join(reasons)}")
+                    search_decisions.append(f"continuing_{'+'.join(reasons)}")
+            else:
+                print(f"   📖 Searching initial pages ({page + 1}/{budget.initial_page_limit})")
                     
             # Check for quality plateau
             if len(quality_scores_history) >= thresholds.plateau_window:
@@ -289,42 +333,15 @@ def smart_candidate_search(
             }
         }
     
-    # Check extraction quality gate
+    # Get final results from quality heap
     final_stats = candidate_heap.get_quality_stats()
-    
-    # Final extraction quality gate check (after all searching is done)
-    if extraction_quality_gate > 0.0:
-        ready_for_extraction, gate_reason = candidate_heap.is_ready_for_extraction(
-            min_avg_threshold=extraction_quality_gate,
-            min_candidates=target_candidate_count or 3
-        )
-        
-        if not ready_for_extraction:
-            print(f"\n🚫 Final extraction quality gate failed: {gate_reason}")
-            print(f"   Current heap average: {final_stats.get('average', 0):.2f}")
-            print(f"   Required average: {extraction_quality_gate}")
-            print(f"   Searched {pages_searched} pages but quality insufficient for extraction")
-            
-            return {
-                "success": False,
-                "error": f"extraction_quality_gate_failed_{gate_reason}",
-                "pages_searched": pages_searched,
-                "candidates_found": final_stats['count'],
-                "candidates_evaluated": candidates_evaluated,
-                "search_query": search_query,
-                "quality_stats": final_stats,
-                "extraction_quality_gate": extraction_quality_gate,
-                "gate_status": "failed",
-                "gate_reason": gate_reason,
-                "quality_candidates": [],  # Don't return candidates if gate failed
-                "search_decisions": search_decisions,
-                "recommendation": f"Lower extraction_quality_gate below {extraction_quality_gate} or search more sources"
-            }
-        else:
-            print(f"\n✅ Extraction quality gate passed: {gate_reason}")
-    
-    # Get final results from quality heap - limit to target count but keep buffer for flexibility
     final_candidates = candidate_heap.get_top_candidates(limit=target_candidate_count)
+    
+    print(f"\n🎯 Search complete:")
+    print(f"   📊 Quality: avg={final_stats.get('average', 0):.1f}, count={final_stats['count']}")
+    print(f"   📚 Heap capacity: {candidate_heap.get_capacity_utilization():.1f}%")
+    print(f"   📄 Pages searched: {pages_searched}/{budget.max_page_limit}")
+    print(f"   ✅ Returning {len(final_candidates)} top candidates for extraction")
     
     # Add candidates to collector with full quality assessment data
     collector = get_url_collector()
@@ -346,38 +363,25 @@ def smart_candidate_search(
     
     return {
         "success": True,
+        "candidates": final_candidates,  # Main result for agent
+        "candidates_found": len(final_candidates),
         "pages_searched": pages_searched,
-        "candidates_found": final_stats['count'],
-        "candidates_evaluated": candidates_evaluated,
-        "total_candidates": final_stats['count'],  # From quality heap
-        "search_query": search_query,
-        "quality_threshold": min_score_threshold,
         
-        # Page continuation information
-        "start_page": start_page,
-        "end_page": page,  # Last page processed 
-        "next_start_page": page,  # Where to continue from next time
+        # CRITICAL: Page continuation info for expand_search_scope fallback
+        "next_start_page": page,  # Where to continue searching from
+        "search_exhausted": page >= budget.max_page_limit,
         
-        # Quality system results
-        "quality_stats": final_stats,
-        "quality_candidates": final_candidates,
+        # Quality summary (simplified for agent)
+        "quality_stats": {
+            "count": final_stats['count'], 
+            "average": final_stats.get('average', 0),
+            "heap_capacity_pct": candidate_heap.get_capacity_utilization()
+        },
+        
+        # Internal data for debugging/monitoring
         "search_decisions": search_decisions,
-        "quality_mode": quality_mode,
-        "adaptive_extensions": len([d for d in search_decisions if "extended" in d]),
-        
-        # Heap buffer information
-        "heap_size": effective_heap_size,
-        "heap_buffer_multiplier": heap_buffer_multiplier,
-        "total_heap_candidates": final_stats['count'],
-        "returned_candidates": len(final_candidates),
-        
-        # Quality insights
-        "quality_insights": {
-            "exceptional_candidates": len([c for c in final_candidates if c['quality_assessment'].overall_score >= thresholds.exceptional_quality]),
-            "target_candidates": len([c for c in final_candidates if c['quality_assessment'].overall_score >= thresholds.target_quality]),
-            "acceptable_candidates": len([c for c in final_candidates if c['quality_assessment'].overall_score >= thresholds.minimum_acceptable]),
-            "search_efficiency": final_stats['count'] / candidates_evaluated if candidates_evaluated > 0 else 0
-        }
+        "total_heap_candidates": final_stats['count'],  # More in heap than returned
+        "search_query": search_query
     }
 
 
