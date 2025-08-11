@@ -545,7 +545,6 @@ def extract_profile() -> Dict[str, Any]:
     try:
         # Run the proven DOM extraction JavaScript
         raw_data = run_js(PROFILE_JS)
-        
         if not raw_data or not isinstance(raw_data, dict):
             return {
                 "error": "Failed to extract profile data - no data returned",
@@ -594,41 +593,6 @@ def extract_complete_profile(profile_url: str = None) -> Dict[str, Any]:
 def extract_current_profile() -> Dict[str, Any]:
     """Extract profile from current page"""
     return extract_profile()
-
-def evaluate_profile_with_strategy(profile_data: Dict[str, Any], strategy: Dict[str, Any]) -> Dict[str, Any]:
-    """Evaluate extracted profile using search strategy context"""
-    try:
-        from .people_search import get_evaluation_generator
-        import json
-        
-        generator = get_evaluation_generator()
-        
-        # Prepare strategy context for the prompt
-        strategy_context = json.dumps({
-            "original_query": strategy.get("original_query", "software engineer role"),
-            "focus_areas": strategy.get("profile_evaluation_context", {}).get("focus_areas", []),
-            "quality_indicators": strategy.get("profile_evaluation_context", {}).get("quality_indicators", []),
-            "ideal_candidate": strategy.get("profile_evaluation_context", {}).get("ideal_candidate_description", ""),
-            "deal_breakers": strategy.get("profile_evaluation_context", {}).get("deal_breakers", [])
-        }, indent=2)
-        
-        result = generator(prompt_kwargs={
-            "strategy_context": strategy_context,
-            "profile_data": json.dumps(profile_data, indent=2)
-        })
-        
-        if hasattr(result, 'data') and result.data:
-            return {
-                "original_profile": profile_data,
-                "llm_evaluation": result.data,
-                "evaluation_method": "adalflow_strategy_based"
-            }
-        else:
-            return create_fallback_evaluation(profile_data, strategy)
-            
-    except Exception as e:
-        print(f"Profile evaluation failed: {e}")
-        return create_fallback_evaluation(profile_data, strategy)
 
 def create_fallback_evaluation(profile_data: Dict[str, Any], strategy: Dict[str, Any]) -> Dict[str, Any]:
     """Fallback evaluation when LLM is unavailable"""
