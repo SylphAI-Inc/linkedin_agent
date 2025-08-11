@@ -135,12 +135,14 @@ def main():
     print("="*60)
     
     if candidates:
-        save_info = workflow.save_results(candidates)  # Error handling now built-in
+        # Pass strategy data for enhanced scoring insights
+        strategy_data = getattr(workflow, 'strategy_data', None)
+        save_info = workflow.save_results(candidates, strategy_data=strategy_data)
         
         # Check if save was successful
-        if "Error:" not in str(save_info.get('scoring_file', '')):
+        if "Error:" not in str(save_info.get('evaluation_file', '')):
             print(f"💾 RESULTS SAVED:")
-            print(f"📊 Scoring File: {save_info['scoring_file']}")
+            print(f"📊 Evaluation File: {save_info['evaluation_file']}")
             print(f"👥 Candidates File: {save_info['candidates_file']}")
             print(f"📝 Summary Report: {save_info['txt_file']}")
         else:
