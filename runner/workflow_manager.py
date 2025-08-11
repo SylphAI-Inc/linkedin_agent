@@ -221,13 +221,25 @@ class LinkedInWorkflowManager:
                 else:
                     candidate_profiles.append(candidate)
             
-            # Evaluate candidates for outreach
+            # Extract technologies from strategy or use sensible defaults
+            strategy_technologies = []
+            if self.strategy:
+                if "key_technologies" in self.strategy:
+                    strategy_technologies = self.strategy["key_technologies"]
+                elif "headline_analysis" in self.strategy and "tech_stack_signals" in self.strategy["headline_analysis"]:
+                    strategy_technologies = self.strategy["headline_analysis"]["tech_stack_signals"]
+            
+            # Use strategy technologies or reasonable defaults
+            required_technologies = strategy_technologies if strategy_technologies else ["Python", "JavaScript", "React", "Node.js", "AWS"]
+            
+            # Evaluate candidates for outreach using strategy-driven approach
             outreach_results = bulk_evaluate_candidates_for_outreach(
                 candidates=candidate_profiles,
-                position_title=self.query,
-                location=self.location,
-                required_technologies=["Python", "JavaScript", "React", "Node.js", "AWS"],
-                experience_level="3-8 years"
+                position_title=self.query,  # Use actual user query
+                location=self.location,     # Use actual user location
+                required_technologies=required_technologies,  # From strategy
+                experience_level="3-8 years",  # TODO: Could also extract from strategy
+                strategy=self.strategy      # Pass full strategy for bonuses
             )
             
             # Save outreach results
@@ -298,7 +310,32 @@ class LinkedInWorkflowManager:
                 func_obj = action or function
                 func_name = getattr(func_obj, 'name', None) if func_obj else None
                 
-                if func_name == 'extract_candidate_profiles':
+                if func_name == 'smart_candidate_search':
+                    # Handle quality-driven search results
+                    if observation and isinstance(observation, dict) and observation.get('quality_candidates'):
+                        search_candidates = observation.get('quality_candidates', [])
+                        print(f"🔍 Processing {len(search_candidates)} candidates from smart_candidate_search")
+                        
+                        for candidate in search_candidates:
+                            if isinstance(candidate, dict):
+                                url = candidate.get('url', 'Unknown URL')
+                                if url not in seen_profiles:
+                                    seen_profiles.add(url)
+                                    # Convert quality search candidate to standard format
+                                    candidates.append({
+                                        "search_info": {
+                                            "url": url,
+                                            "headline_score": candidate.get('quality_assessment', {}).overall_score if candidate.get('quality_assessment') else 0
+                                        },
+                                        "profile_details": {
+                                            "name": candidate.get('name', ''),
+                                            "headline": candidate.get('headline', ''),
+                                            "url": url,
+                                            "quality_assessment": candidate.get('quality_assessment').__dict__ if candidate.get('quality_assessment') else {}
+                                        }
+                                    })
+                
+                elif func_name == 'extract_candidate_profiles':
                     # Handle batch profile extraction results
                     if observation and isinstance(observation, dict) and observation.get('results'):
                         batch_results = observation.get('results', [])
@@ -312,11 +349,13 @@ class LinkedInWorkflowManager:
                                 profile_data = result.get('profile_data', {})
                                 url = candidate_info.get('url', 'Unknown URL')
                                 
-                                # Create unique identifier for deduplication
-                                candidates.append({
-                                    "search_info": {"url": url},
-                                    "profile_details": profile_data
-                                })
+                                if url not in seen_profiles:
+                                    seen_profiles.add(url)
+                                    # Create unique identifier for deduplication
+                                    candidates.append({
+                                        "search_info": {"url": url},
+                                        "profile_details": profile_data
+                                    })
         
         print(f"📊 Extracted {len(candidates)} unique candidates")
         return candidates

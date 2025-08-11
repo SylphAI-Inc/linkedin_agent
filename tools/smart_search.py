@@ -210,6 +210,7 @@ def smart_candidate_search(
             # Get current quality statistics
             current_stats = candidate_heap.get_quality_stats()
             print(f"   📈 Current heap: {current_stats['count']} candidates, avg quality: {current_stats.get('average', 0):.1f}")
+            time.sleep(3)
             
             
             # Make adaptive decisions - include extraction quality gate check
@@ -250,7 +251,7 @@ def smart_candidate_search(
                     break
             
             # Small delay between pages
-            time.sleep(2)
+            time.sleep(3)
             # Move to next page
             page += 1
             pages_searched = page

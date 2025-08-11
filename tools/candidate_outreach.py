@@ -99,7 +99,8 @@ class CandidateOutreachManager:
     def evaluate_candidate_for_outreach(
         self,
         candidate_profile: Dict[str, Any],
-        position_context: Dict[str, Any]
+        position_context: Dict[str, Any],
+        strategy: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Evaluate a candidate's profile and generate personalized outreach if qualified
@@ -142,6 +143,10 @@ class CandidateOutreachManager:
                 if not evaluation_obj.candidate_name:
                     evaluation_obj.candidate_name = candidate_profile.get('name', 'Unknown')
                 
+                # Apply strategic bonuses if strategy provided
+                if strategy:
+                    evaluation_obj = self._apply_strategic_bonuses(evaluation_obj, candidate_profile, strategy)
+                
                 # Convert to dict for compatibility with existing code
                 evaluation_data = evaluation_obj.to_dict()
                 evaluation_data.update({
@@ -170,6 +175,11 @@ class CandidateOutreachManager:
                                 # Convert to CandidateOutreachEvaluation object
                                 evaluation_obj = CandidateOutreachEvaluation.from_dict(evaluation_dict)
                                 evaluation_data = evaluation_obj.to_dict()
+                                # Apply strategic bonuses if strategy provided
+                                if strategy:
+                                    evaluation_obj = self._apply_strategic_bonuses(evaluation_obj, candidate_profile, strategy)
+                                    evaluation_data = evaluation_obj.to_dict()
+                                
                                 evaluation_data.update({
                                     "candidate_url": candidate_profile.get('url', ''),
                                     "evaluation_timestamp": datetime.now().isoformat(),
@@ -209,16 +219,25 @@ class CandidateOutreachManager:
     
     def _format_position_context(self, position_context: Dict[str, Any]) -> str:
         """Format position context for the prompt"""
-        return f"""
+        context_str = f"""
 Role: {position_context.get('title', 'Software Engineer')}
 Location: {position_context.get('location', 'San Francisco')}
 Experience Level: {position_context.get('experience_level', '3-8 years')}
 Key Technologies: {', '.join(position_context.get('technologies', ['Python', 'JavaScript', 'React']))}
 Company Type: {position_context.get('company_type', 'Tech startup/established company')}
-Remote Policy: {position_context.get('remote_policy', 'Hybrid/Remote-friendly')}
-Team Size: {position_context.get('team_size', '10-50 engineers')}
-Special Requirements: {position_context.get('special_requirements', 'None specified')}
-"""
+Remote Policy: {position_context.get('remote_policy', 'Hybrid/Remote-friendly')}"""
+
+        # Add strategy-driven context if available
+        if position_context.get('strategy_companies'):
+            context_str += f"\nTarget Companies: {', '.join(position_context['strategy_companies'])}"
+        
+        if position_context.get('seniority_levels'):
+            context_str += f"\nDesired Seniority: {', '.join(position_context['seniority_levels'])}"
+            
+        if position_context.get('primary_titles'):
+            context_str += f"\nPrimary Job Titles: {', '.join(position_context['primary_titles'])}"
+        
+        return context_str
     
     def _format_candidate_profile(self, profile: Dict[str, Any]) -> str:
         """Format candidate profile for the prompt"""
@@ -273,6 +292,128 @@ Experience:
             "outreach_rate": f"{(should_contact/total_evaluated*100):.1f}%" if total_evaluated > 0 else "0%",
             "evaluations": self.outreach_history
         }
+    
+    def _apply_strategic_bonuses(self, evaluation_obj: CandidateOutreachEvaluation, 
+                               candidate_profile: Dict[str, Any], 
+                               strategy: Dict[str, Any]) -> CandidateOutreachEvaluation:
+        """Apply strategic bonuses to outreach evaluation based on search strategy"""
+        
+        # Extract candidate headline and current info
+        profile_data = candidate_profile.get('profile_data', {})
+        headline = candidate_profile.get('headline', '') or profile_data.get('headline', '')
+        current_company = profile_data.get('current_company', '')
+        current_title = profile_data.get('current_title', '')
+        
+        # Combine headline and current info for analysis
+        analysis_text = f"{headline} {current_title} {current_company}".lower()
+        
+        # Calculate strategic bonuses
+        company_bonus = self._calculate_company_bonus(analysis_text, strategy)
+        seniority_bonus = self._calculate_seniority_bonus(analysis_text, strategy) 
+        tech_stack_bonus = self._calculate_tech_stack_bonus(analysis_text, strategy)
+        
+        total_bonus = company_bonus + seniority_bonus + tech_stack_bonus
+        
+        if total_bonus > 0:
+            print(f"      📈 Strategic bonuses: Company(+{company_bonus:.1f}) + Seniority(+{seniority_bonus:.1f}) + Tech(+{tech_stack_bonus:.1f}) = +{total_bonus:.1f}")
+        
+        # Apply bonuses to overall score (cap at 50.0)
+        original_score = evaluation_obj.overall_outreach_score
+        new_score = min(original_score + total_bonus, 50.0)
+        evaluation_obj.overall_outreach_score = new_score
+        
+        # Update recommendation based on new score
+        if new_score >= 35.0 and not evaluation_obj.recommend_outreach:
+            evaluation_obj.recommend_outreach = True
+            print(f"      🎯 Strategic bonus triggered outreach recommendation: {original_score:.1f} → {new_score:.1f}")
+        
+        # Update priority based on final score
+        if new_score >= 42.0:
+            evaluation_obj.outreach_priority = "High"
+        elif new_score >= 38.0:
+            evaluation_obj.outreach_priority = "Medium"
+        else:
+            evaluation_obj.outreach_priority = "Low"
+        
+        return evaluation_obj
+    
+    def _calculate_company_bonus(self, analysis_text: str, strategy: Dict[str, Any]) -> float:
+        """Calculate company-based bonus from strategy"""
+        bonus = 0.0
+        
+        # Extract target companies from strategy
+        target_companies = []
+        if "target_companies" in strategy:
+            target_companies = strategy["target_companies"]
+        elif "headline_analysis" in strategy and "company_indicators" in strategy["headline_analysis"]:
+            target_companies = strategy["headline_analysis"]["company_indicators"]
+        
+        if not target_companies:
+            return 0.0
+        
+        # Company tier definitions (same as search system)
+        tier_1_companies = ["google", "facebook", "meta", "apple", "microsoft", "amazon", "netflix", "tesla", "uber", "airbnb"]
+        tier_2_companies = ["stripe", "dropbox", "slack", "salesforce", "adobe", "nvidia", "twitter", "linkedin", "pinterest", "square"]
+        
+        # Check for company mentions
+        for company in target_companies:
+            company_lower = company.lower()
+            if company_lower in analysis_text:
+                if company_lower in tier_1_companies:
+                    bonus = max(bonus, 5.0)  # Tier 1 companies get 5 point bonus
+                elif company_lower in tier_2_companies:
+                    bonus = max(bonus, 3.0)  # Tier 2 companies get 3 point bonus  
+                else:
+                    bonus = max(bonus, 2.0)  # Other target companies get 2 point bonus
+                break
+                
+        return bonus
+    
+    def _calculate_seniority_bonus(self, analysis_text: str, strategy: Dict[str, Any]) -> float:
+        """Calculate seniority-based bonus from strategy"""
+        bonus = 0.0
+        
+        # Extract seniority indicators from strategy
+        seniority_indicators = []
+        if "seniority_indicators" in strategy:
+            seniority_indicators = [s.lower() for s in strategy["seniority_indicators"]]
+        elif "headline_analysis" in strategy and "seniority_keywords" in strategy["headline_analysis"]:
+            seniority_indicators = [s.lower() for s in strategy["headline_analysis"]["seniority_keywords"]]
+        
+        # Check for seniority matches
+        for indicator in seniority_indicators:
+            if indicator in analysis_text:
+                # Categorize seniority level
+                if any(exec_word in indicator for exec_word in ["cto", "ceo", "vp", "director", "head of"]):
+                    bonus = max(bonus, 4.0)  # Executive level
+                elif any(prin_word in indicator for prin_word in ["principal", "staff", "architect"]):
+                    bonus = max(bonus, 3.0)  # Principal/Staff level  
+                elif any(sr_word in indicator for sr_word in ["senior", "lead", "sr."]):
+                    bonus = max(bonus, 2.0)  # Senior level
+                else:
+                    bonus = max(bonus, 1.0)  # General seniority indicator
+                break
+                
+        return bonus
+    
+    def _calculate_tech_stack_bonus(self, analysis_text: str, strategy: Dict[str, Any]) -> float:
+        """Calculate technology stack bonus from strategy"""
+        bonus = 0.0
+        
+        # Extract key technologies from strategy
+        key_technologies = []
+        if "key_technologies" in strategy:
+            key_technologies = [t.lower() for t in strategy["key_technologies"]]
+        elif "headline_analysis" in strategy and "tech_stack_signals" in strategy["headline_analysis"]:
+            key_technologies = [t.lower() for t in strategy["headline_analysis"]["tech_stack_signals"]]
+        
+        # Count technology matches
+        tech_matches = [tech for tech in key_technologies if tech in analysis_text]
+        if tech_matches:
+            # Give bonus based on number of tech matches (max 2.0 points)
+            bonus = min(len(tech_matches) * 0.5, 2.0)
+            
+        return bonus
 
 
 # Global outreach manager instance
@@ -286,7 +427,8 @@ def evaluate_candidate_for_outreach(
     required_technologies: List[str] = None,
     experience_level: str = "3-8 years",
     company_type: str = "Tech company",
-    remote_policy: str = "Hybrid/Remote-friendly"
+    remote_policy: str = "Hybrid/Remote-friendly",
+    strategy: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Evaluate a candidate's profile for outreach and generate personalized DM if qualified
@@ -304,23 +446,36 @@ def evaluate_candidate_for_outreach(
         Evaluation results with outreach recommendation and personalized message
     """
     
-    # Build position context
+    # Build position context using strategy data when available
+    technologies = required_technologies
+    if not technologies and strategy:
+        # Extract from strategy if not provided
+        if "key_technologies" in strategy:
+            technologies = strategy["key_technologies"]
+        elif "headline_analysis" in strategy and "tech_stack_signals" in strategy["headline_analysis"]:
+            technologies = strategy["headline_analysis"]["tech_stack_signals"]
+    
+    # Use strategy-provided defaults or fallback
+    technologies = technologies or ["Python", "JavaScript", "React", "Node.js"]
+    
     position_context = {
         "title": position_title,
         "location": location,
-        "technologies": required_technologies or ["Python", "JavaScript", "React", "Node.js"],
+        "technologies": technologies,
         "experience_level": experience_level,
         "company_type": company_type,
         "remote_policy": remote_policy,
-        "team_size": "10-50 engineers",
-        "special_requirements": "Strong communication skills, collaborative mindset"
+        "strategy_companies": strategy.get("target_companies", []) if strategy else [],
+        "seniority_levels": strategy.get("seniority_indicators", []) if strategy else [],
+        "primary_titles": strategy.get("primary_titles", strategy.get("primary_job_titles", [])) if strategy else []
     }
     
     print(f"📋 Evaluating candidate: {candidate_profile.get('name', 'Unknown')} for outreach...")
     
     return _outreach_manager.evaluate_candidate_for_outreach(
         candidate_profile=candidate_profile,
-        position_context=position_context
+        position_context=position_context,
+        strategy=strategy
     )
 
 
@@ -329,7 +484,8 @@ def bulk_evaluate_candidates_for_outreach(
     position_title: str = "Software Engineer",
     location: str = "San Francisco",
     required_technologies: List[str] = None,
-    experience_level: str = "3-8 years"
+    experience_level: str = "3-8 years",
+    strategy: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Evaluate multiple candidates for outreach in batch
@@ -359,7 +515,8 @@ def bulk_evaluate_candidates_for_outreach(
                 position_title=position_title,
                 location=location,
                 required_technologies=required_technologies,
-                experience_level=experience_level
+                experience_level=experience_level,
+                strategy=strategy
             )
             
             results.append(evaluation)

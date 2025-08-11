@@ -360,14 +360,14 @@ class QualityAnalyzer:
         company_score_boost = self._assess_company_quality_boost(headline, strategy)
         seniority_score_boost = self._assess_seniority_quality_boost(headline, strategy)
         
-        # Overall score (weighted average + boosts)
+        # Overall score (weighted average + boosts) - capped at 10.0
         base_score = (
             technical_score * 0.35 +
             experience_score * 0.35 + 
             cultural_fit_score * 0.20 +
             extraction_quality * 0.10
         )
-        overall_score = base_score + company_score_boost + seniority_score_boost
+        overall_score = min(base_score + company_score_boost + seniority_score_boost, 10.0)
         
         # Generate explanations (including boost info)
         strengths, concerns = self._generate_quality_explanations_integrated(
@@ -388,7 +388,7 @@ class QualityAnalyzer:
                 "seniority_boost": seniority_score_boost,
                 "base_score": round(base_score, 2),
                 "total_boost": round(company_score_boost + seniority_score_boost, 2),
-                "strategy_format": "agent" if "primary_titles" in strategy else "fallback",
+                "strategy_format": "agent" if ("primary_titles" in strategy or "primary_job_titles" in strategy) else "fallback",
                 "headline_length": len(headline) if headline else 0
             },
             extraction_quality=round(extraction_quality, 2),
@@ -404,7 +404,7 @@ class QualityAnalyzer:
         headline_lower = headline.lower()
         score = 0.0
         
-        # Handle both strategy formats: agent format and expected format
+        # Handle multiple strategy formats: agent format, fallback format, and new agent format
         if "headline_analysis" in strategy:
             # Expected format from fallback strategy
             target_titles = [title.lower() for title in strategy.get("headline_analysis", {}).get("target_job_titles", [])]
@@ -414,8 +414,11 @@ class QualityAnalyzer:
             tech_signals = [tech.lower() for tech in strategy.get("headline_analysis", {}).get("tech_stack_signals", [])]
             negative_patterns = [pattern.lower() for pattern in strategy.get("search_filtering", {}).get("negative_headline_patterns", [])]
         else:
-            # Agent format - convert to expected format
-            target_titles = [title.lower() for title in strategy.get("primary_titles", [])]
+            # Agent format - handle both old and new field names
+            target_titles = [title.lower() for title in (
+                strategy.get("primary_titles", []) or 
+                strategy.get("primary_job_titles", [])
+            )]
             alternative_titles = [title.lower() for title in strategy.get("alternative_titles", [])]
             seniority_keywords = [kw.lower() for kw in strategy.get("seniority_indicators", [])]
             company_indicators = [comp.lower() for comp in strategy.get("target_companies", [])]
@@ -594,15 +597,17 @@ class QualityAnalyzer:
         # Extract primary and alternative titles from strategy  
         primary_titles = []
         alternative_titles = []
-        if "primary_titles" in strategy:
-            primary_titles = [t.lower() for t in strategy["primary_titles"]]
-        elif "headline_analysis" in strategy and "target_job_titles" in strategy["headline_analysis"]:
-            primary_titles = [t.lower() for t in strategy["headline_analysis"]["target_job_titles"]]
-            
-        if "alternative_titles" in strategy:
-            alternative_titles = [t.lower() for t in strategy["alternative_titles"]]
-        elif "headline_analysis" in strategy and "alternative_titles" in strategy["headline_analysis"]:
-            alternative_titles = [t.lower() for t in strategy["headline_analysis"]["alternative_titles"]]
+        if "headline_analysis" in strategy:
+            # Fallback format
+            primary_titles = [t.lower() for t in strategy.get("headline_analysis", {}).get("target_job_titles", [])]
+            alternative_titles = [t.lower() for t in strategy.get("headline_analysis", {}).get("alternative_titles", [])]
+        else:
+            # Agent format - handle both old and new field names
+            primary_titles = [t.lower() for t in (
+                strategy.get("primary_titles", []) or 
+                strategy.get("primary_job_titles", [])
+            )]
+            alternative_titles = [t.lower() for t in strategy.get("alternative_titles", [])]
         
         # Categorize seniority levels based on common patterns
         executive_words = ["cto", "ceo", "vp", "vice president", "director", "head of", "chief"]
