@@ -265,6 +265,11 @@ class SearchStrategy(DataClass):
         metadata={"desc": "Context for evaluating candidate profiles"}
     ) 
     
+    evaluation_criteria: Dict[str, Any] = field(
+        default_factory=dict,
+        metadata={"desc": "Structured criteria for systematic candidate evaluation and strategic bonuses"}
+    )
+    
     search_terms: Optional[str] = field(
         default=None,
         metadata={"desc": "Optimized search terms to use on LinkedIn"}

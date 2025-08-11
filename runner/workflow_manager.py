@@ -2,16 +2,16 @@
 LinkedIn Recruitment Workflow Manager
 Handles the orchestration of the recruitment process in clean, decoupled steps
 """
+from functools import partial
 from typing import Dict, List, Any
 from datetime import datetime
 from pathlib import Path
 import json
 
-from tools.strategy_generator import StrategyGenerator
 from src.linkedin_agent import LinkedInAgent
 from utils.role_prompts import RolePromptBuilder
 from config import AgentConfig
-
+from adalflow.core.func_tool import FunctionTool
 
 class LinkedInWorkflowManager:
     """Manages the LinkedIn recruitment workflow with clean separation of concerns"""
@@ -25,49 +25,28 @@ class LinkedInWorkflowManager:
         
         # Initialize components
         self.agent = None
-        self.strategy_generator = StrategyGenerator()
-        self.strategy = {}
         self.results = []
         self.config = AgentConfig()  # Initialize agent config
         
-    def create_recruitment_strategy(self) -> Dict[str, Any]:
-        """Step 1: Create comprehensive search strategy (DISABLED - not in original flow)"""
-        print("🔍 Creating recruitment strategy...")
-        
-        try:
-            self.strategy = self.strategy_generator.create_search_strategy(
-                query=self.query,
-                location=self.location
-            )
-            self.strategy = self.strategy.to_dict()
-            self.strategy['original_query'] = self.query
-            return self.strategy
-        except Exception as e:
-            print(f"⚠️  Failed to create strategy: {e}")
-            print("📊 Using fallback strategy instead")
-
-            # Use simple fallback strategy to avoid LLM calls that cause issues
-            self.strategy = self._create_fallback_strategy()
-            return self.strategy
         
     def initialize_agent(self) -> LinkedInAgent:
-        """Step 2: Initialize agent with strategy context"""
-        print("🤖 Initializing LinkedIn agent with strategy context...")
+        """Step 2: Initialize agent for agentic workflow"""
+        print("🤖 Initializing LinkedIn agent for agentic workflow...")
         
-        # Build enhanced prompt with strategy
-        if self.enhanced_prompting and self.strategy:
-            prompt = self._build_strategy_enhanced_prompt()
-        else:
-            prompt = self._build_basic_prompt()
-        
+        # Initialize the agent
         self.agent = LinkedInAgent()
-        print("✅ Agent initialized")
+        
+        # Build prompt for agentic workflow
+        prompt = self._build_agentic_prompt()
+        print("✅ Using agentic workflow prompt with strategy generation")
+        
+        print("✅ Agent initialized with full agentic workflow")
         
         return self.agent, prompt
     
-    def execute_search_workflow(self, strategy, progress_tracker=None) -> List[Dict[str, Any]]:
-        """Step 3: Execute the complete search workflow with robust error handling"""
-        print(f"🔍 Starting recruitment workflow...")
+    def execute_search_workflow(self, progress_tracker=None) -> List[Dict[str, Any]]:
+        """Step 3: Execute the complete agentic workflow"""
+        print(f"🔍 Starting agentic recruitment workflow...")
         print(f"📊 Target: {self.limit} candidates")
         
         candidates = []
@@ -84,8 +63,9 @@ class LinkedInWorkflowManager:
             # Print agent execution steps (same format as original runner)
             self._print_agent_execution_steps(result)
             
-            # Process results based on agent execution
-            candidates = self._extract_candidates_from_result(result)
+            # Process results from 4-step agentic workflow
+            agent_results = self._extract_results_from_agent(result)
+            candidates = agent_results["candidates"]
             
             # If no candidates from step history, try extracting from final answer
             if len(candidates) == 0:
@@ -97,14 +77,25 @@ class LinkedInWorkflowManager:
                 print("🔍 No candidates from final answer, trying URL re-extraction...")
                 candidates = self._retry_extraction_from_urls(result)
             
-            # Auto-evaluate candidates for outreach if we have extracted profiles
-            if len(candidates) > 0 and progress_tracker and self.config.enable_outreach_evaluation:
+            # Log and save outreach results if agent generated them
+            if agent_results.get("outreach_results"):
                 try:
-                    print("📋 Evaluating candidates for outreach...")
-                    outreach_summary = self._evaluate_candidates_for_outreach(candidates)
-                    progress_tracker.log_outreach_evaluation(outreach_summary)
+                    print("📧 Processing agent outreach results...")
+                    
+                    # Log results if progress tracker available
+                    if progress_tracker:
+                        progress_tracker.log_outreach_evaluation(agent_results["outreach_results"])
+                    
+                    # Save outreach results to file
+                    try:
+                        from tools.candidate_outreach import save_outreach_results
+                        outreach_file = save_outreach_results(agent_results["outreach_results"])
+                        print(f"💾 Outreach results saved to: {outreach_file}")
+                    except Exception as save_error:
+                        print(f"⚠️  Could not save outreach results: {save_error}")
+                        
                 except Exception as outreach_error:
-                    print(f"⚠️  Outreach evaluation failed: {outreach_error}")
+                    print(f"⚠️  Outreach processing failed: {outreach_error}")
             
             if progress_tracker:
                 progress_tracker.log_completion(candidates)
@@ -188,7 +179,7 @@ class LinkedInWorkflowManager:
                 "limit": self.limit,
                 "enhanced_prompting": self.enhanced_prompting,
                 "streaming": self.streaming,
-                "strategy_used": bool(self.strategy)
+                "strategy_used": True  # Strategy is now always generated by agent
             }
             
             return save_recruitment_results(candidates, search_params, output_dir)
@@ -203,65 +194,13 @@ class LinkedInWorkflowManager:
                 "candidates_count": len(candidates)
             }
     
-    def _evaluate_candidates_for_outreach(self, candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Evaluate extracted candidates for outreach and generate personalized messages"""
-        try:
-            from tools.candidate_outreach import bulk_evaluate_candidates_for_outreach
-            
-            # Extract the profile data for evaluation
-            candidate_profiles = []
-            for candidate in candidates:
-                if isinstance(candidate, dict) and 'profile_details' in candidate:
-                    profile_data = candidate['profile_details']
-                    # Add search info for context
-                    if 'search_info' in candidate:
-                        profile_data['search_context'] = candidate['search_info']
-                    candidate_profiles.append(profile_data)
-                elif isinstance(candidate, dict) and 'profile_data' in candidate:
-                    candidate_profiles.append(candidate['profile_data'])
-                else:
-                    candidate_profiles.append(candidate)
-            
-            # Extract technologies from strategy or use sensible defaults
-            strategy_technologies = []
-            if self.strategy:
-                if "key_technologies" in self.strategy:
-                    strategy_technologies = self.strategy["key_technologies"]
-                elif "headline_analysis" in self.strategy and "tech_stack_signals" in self.strategy["headline_analysis"]:
-                    strategy_technologies = self.strategy["headline_analysis"]["tech_stack_signals"]
-            
-            # Use strategy technologies or reasonable defaults
-            required_technologies = strategy_technologies if strategy_technologies else ["Python", "JavaScript", "React", "Node.js", "AWS"]
-            
-            # Evaluate candidates for outreach using strategy-driven approach
-            outreach_results = bulk_evaluate_candidates_for_outreach(
-                candidates=candidate_profiles,
-                position_title=self.query,  # Use actual user query
-                location=self.location,     # Use actual user location
-                required_technologies=required_technologies,  # From strategy
-                experience_level="3-8 years",  # TODO: Could also extract from strategy
-                strategy=self.strategy      # Pass full strategy for bonuses
-            )
-            
-            # Save outreach results
-            from tools.candidate_outreach import save_outreach_results
-            outreach_file = save_outreach_results(outreach_results)
-            outreach_results['saved_to'] = outreach_file
-            
-            return outreach_results
-            
-        except Exception as e:
-            print(f"❌ Outreach evaluation error: {e}")
-            return {"error": str(e), "candidates_evaluated": 0}
-    
-    def _build_strategy_enhanced_prompt(self) -> str:
-        """Build prompt enhanced with strategy context - simplified to match original"""
-        # Use the original working approach - just build enhanced prompt directly
+    def _build_agentic_prompt(self) -> str:
+        """Build prompt for agentic workflow with strategy generation"""
         return RolePromptBuilder.build_enhanced_prompt(
             base_query=self.query,
             location=self.location,
             limit=self.limit,
-            strategy=self.strategy
+            strategy=None  # Strategy will be generated by agent as first step
         )
     
     def _build_basic_prompt(self) -> str:
@@ -294,46 +233,236 @@ class LinkedInWorkflowManager:
             "fallback_strategy": True
         }
     
-    def _extract_candidates_from_result(self, result) -> List[Dict[str, Any]]:
-        """Extract detailed candidate profiles from agent's extraction results"""
-        candidates = []
-        seen_profiles = set()  # Track seen profiles to avoid duplicates
+    def _extract_results_from_agent(self, result) -> Dict[str, Any]:
+        """Extract results from the 5-step agentic workflow"""
+        results = {
+            "strategy_results": None,
+            "extraction_results": None,
+            "evaluation_results": None, 
+            "outreach_results": None,
+            "candidates": []
+        }
         
         if hasattr(result, 'step_history'):
-            # Process step history to find detailed profile extraction results
+            # Process step history to find tool results
             for step in result.step_history:
-                # Handle both action and function attributes from AdalFlow steps
                 action = getattr(step, 'action', None)
                 function = getattr(step, 'function', None)
                 observation = getattr(step, 'observation', None)
                 
-                # Get function name from action or function object
                 func_obj = action or function
                 func_name = getattr(func_obj, 'name', None) if func_obj else None
                 
-                if func_name == 'extract_candidate_profiles':
-                    # Handle batch profile extraction results
-                    if observation and isinstance(observation, dict) and observation.get('results'):
-                        batch_results = observation.get('results', [])
-                        print(f"🔍 Processing {len(batch_results)} profiles from extract_candidate_profiles")
-                        
-                        for result in batch_results:
-                            print(f"Extracted profile data: {result}")
-                            if isinstance(result, dict) and result.get('profile_data'):
-                                # Try to get URL from profile_data itself first
-                                candidate_info = result.get('candidate_info', {})
-                                profile_data = result.get('profile_data', {})
-                                url = candidate_info.get('url', 'Unknown URL')
-                                
-                                if url not in seen_profiles:
-                                    seen_profiles.add(url)
-                                    # Create unique identifier for deduplication
-                                    candidates.append({
-                                        "search_info": {"url": url},
-                                        "profile_details": profile_data
-                                    })
+                if func_name == 'create_search_strategy':
+                    print(f"🎯 Found strategy results")
+                    results["strategy_results"] = observation
+                    
+                elif func_name == 'extract_candidate_profiles':
+                    print(f"📥 Found extraction results")
+                    results["extraction_results"] = observation
+                    
+                elif func_name == 'evaluate_candidates_quality':
+                    print(f"🎯 Found evaluation results") 
+                    results["evaluation_results"] = observation
+                    
+                elif func_name == 'generate_candidate_outreach':
+                    print(f"📧 Found outreach results")
+                    results["outreach_results"] = observation
         
-        print(f"📊 Extracted {len(candidates)} unique candidates")
+        # Merge data from different sources for complete candidate information
+        candidates = self._merge_candidate_data(
+            extraction_results=results["extraction_results"],
+            evaluation_results=results["evaluation_results"], 
+            outreach_results=results["outreach_results"]
+        )
+        
+        results["candidates"] = candidates
+        print(f"📊 Extracted {len(candidates)} candidates from agent workflow")
+        
+        return results
+    
+    def _merge_candidate_data(
+        self, 
+        extraction_results: Dict[str, Any], 
+        evaluation_results: Dict[str, Any],
+        outreach_results: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Merge candidate data from extraction, evaluation, and outreach results"""
+        
+        candidates = []
+        
+        # Start with extraction results (complete profile data)
+        if extraction_results and isinstance(extraction_results, dict):
+            batch_results = extraction_results.get('results', [])
+            print(f"📥 Found {len(batch_results)} extraction results")
+            
+            # Create lookup for evaluation scores by candidate name/URL
+            eval_scores = {}
+            if evaluation_results and isinstance(evaluation_results, dict):
+                all_evaluated = evaluation_results.get('all_evaluated_candidates', [])
+                for eval_candidate in all_evaluated:
+                    name = eval_candidate.get('name', '')
+                    url = eval_candidate.get('url', '')
+                    if name or url:
+                        key = name if name else url
+                        eval_scores[key] = eval_candidate
+                print(f"🎯 Found {len(eval_scores)} evaluation scores")
+            
+            # Create lookup for outreach data by candidate name
+            outreach_data = {}
+            if outreach_results and isinstance(outreach_results, dict):
+                outreach_messages = outreach_results.get('messages', [])
+                for outreach_msg in outreach_messages:
+                    name = outreach_msg.get('name', '')
+                    if name:
+                        outreach_data[name] = outreach_msg
+                print(f"📧 Found {len(outreach_data)} outreach messages")
+            
+            # Merge all data sources
+            for result in batch_results:
+                if isinstance(result, dict) and result.get('profile_data'):
+                    candidate_info = result.get('candidate_info', {})
+                    profile_data = result.get('profile_data', {})
+                    
+                    # Get candidate identifiers
+                    name = profile_data.get('name', candidate_info.get('name', ''))
+                    url = candidate_info.get('url', profile_data.get('url', ''))
+                    
+                    # Find matching evaluation and outreach data
+                    eval_data = eval_scores.get(name, eval_scores.get(url, {}))
+                    outreach_msg = outreach_data.get(name, {})
+                    
+                    # Build complete candidate record
+                    candidate = {
+                        "search_info": {
+                            "url": url,
+                            "headline_score": candidate_info.get('headline_score', 0.0),
+                            "name": name
+                        },
+                        "profile_details": {
+                            **profile_data,  # Complete profile (experiences, education, skills, etc.)
+                            "quality_assessment": eval_data.get('quality_assessment', candidate_info.get('quality_assessment', {}))
+                        }
+                    }
+                    
+                    # Add evaluation scores if available
+                    if eval_data:
+                        # Handle quality_assessment whether it's a dict or dataclass
+                        quality_assessment = candidate["profile_details"]["quality_assessment"]
+                        
+                        # Convert dataclass to dict if needed using .to_dict() method
+                        if hasattr(quality_assessment, 'to_dict'):
+                            quality_assessment = quality_assessment.to_dict()
+                        elif not isinstance(quality_assessment, dict):
+                            quality_assessment = {}
+                        
+                        # Update with evaluation data
+                        quality_assessment.update({
+                            "overall_score": eval_data.get('overall_score', 0.0),
+                            "component_scores": eval_data.get('component_scores', {}),
+                            "meets_threshold": eval_data.get('meets_threshold', False),
+                            "strengths": eval_data.get('strengths', []),
+                            "concerns": eval_data.get('concerns', []),
+                            "evaluation_timestamp": eval_data.get('evaluation_timestamp', ''),
+                            "strategic_bonuses": eval_data.get('strategic_bonuses', {}),
+                            "baseline_scores": eval_data.get('baseline_scores', {})
+                        })
+                        
+                        # Assign back to candidate
+                        candidate["profile_details"]["quality_assessment"] = quality_assessment
+                    
+                    # Add outreach data if available
+                    if outreach_msg:
+                        candidate["profile_details"]["outreach_info"] = {
+                            "message": outreach_msg.get('message', ''),
+                            "recommend_outreach": outreach_msg.get('recommend_outreach', False),
+                            "outreach_score": outreach_msg.get('score', 0.0),
+                            "outreach_reasoning": outreach_msg.get('reasoning', '')
+                        }
+                    
+                    candidates.append(candidate)
+        
+        print(f"📊 Merged complete data for {len(candidates)} candidates")
+        return candidates
+    
+    def _extract_candidates_from_evaluation(self, evaluation_results) -> List[Dict[str, Any]]:
+        """Extract candidates from evaluation tool results (preferred - has quality scores)"""
+        if not evaluation_results or not isinstance(evaluation_results, dict):
+            return []
+        
+        candidates = []
+        
+        # Get all evaluated candidates (both quality and non-quality)
+        all_candidates = evaluation_results.get('all_evaluated_candidates', [])
+        quality_candidates = evaluation_results.get('quality_candidates', [])
+        
+        print(f"🎯 Processing {len(all_candidates)} evaluated candidates")
+        
+        # Use original candidate data from evaluation results for complete profile info
+        for candidate in all_candidates:
+            if isinstance(candidate, dict):
+                # Extract the original nested structure that has complete profile data
+                original_candidate = candidate.get('original_candidate', candidate)
+                
+                # Get candidate info and profile data
+                if 'candidate_info' in original_candidate and 'profile_data' in original_candidate:
+                    candidate_info = original_candidate['candidate_info']
+                    profile_data = original_candidate['profile_data']
+                else:
+                    # Fallback to flat structure
+                    candidate_info = candidate
+                    profile_data = candidate
+                
+                candidates.append({
+                    "search_info": {
+                        "url": candidate_info.get('url', profile_data.get('url', '')),
+                        "headline_score": candidate.get('overall_score', candidate_info.get('headline_score', 0.0)),
+                        "name": profile_data.get('name', candidate_info.get('name', candidate.get('name', '')))
+                    },
+                    "profile_details": {
+                        **profile_data,  # Include all profile data (experiences, education, skills, etc.)
+                        "quality_assessment": {
+                            "overall_score": candidate.get('overall_score', 0.0),
+                            "component_scores": candidate.get('component_scores', {}),
+                            "meets_threshold": candidate.get('meets_threshold', False),
+                            "strengths": candidate.get('strengths', []),
+                            "concerns": candidate.get('concerns', []),
+                            "evaluation_timestamp": candidate.get('evaluation_timestamp', ''),
+                            "strategic_bonuses": candidate.get('strategic_bonuses', {}),
+                            "baseline_scores": candidate.get('baseline_scores', {})
+                        }
+                    }
+                })
+        
+        return candidates
+    
+    def _extract_candidates_from_extraction(self, extraction_results) -> List[Dict[str, Any]]:
+        """Extract candidates from extraction tool results (fallback)"""
+        if not extraction_results or not isinstance(extraction_results, dict):
+            return []
+        
+        candidates = []
+        batch_results = extraction_results.get('results', [])
+        
+        print(f"📥 Processing {len(batch_results)} extraction results")
+        
+        for result in batch_results:
+            if isinstance(result, dict) and result.get('profile_data'):
+                candidate_info = result.get('candidate_info', {})
+                profile_data = result.get('profile_data', {})
+                
+                candidates.append({
+                    "search_info": {
+                        "url": candidate_info.get('url', ''),
+                        "headline_score": candidate_info.get('headline_score', 0.0),
+                        "name": candidate_info.get('name', '')
+                    },
+                    "profile_details": {
+                        **profile_data,
+                        "quality_assessment": candidate_info.get('quality_assessment', {})
+                    }
+                })
+        
         return candidates
     
     def _extract_url_from_step_history(self, steps, current_step) -> str:

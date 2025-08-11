@@ -326,14 +326,15 @@ def smart_candidate_search(
     # Get final results from quality heap - limit to target count but keep buffer for flexibility
     final_candidates = candidate_heap.get_top_candidates(limit=target_candidate_count)
     
-    # Add old collector for backward compatibility
+    # Add candidates to collector with full quality assessment data
     collector = get_url_collector()
     for candidate in final_candidates:
         collector.add_candidate({
             'name': candidate.get('name', ''),
             'url': candidate.get('url', ''),
             'headline': candidate.get('headline', ''),
-            'headline_score': candidate['quality_assessment'].overall_score
+            'headline_score': candidate['quality_assessment'].overall_score,
+            'quality_assessment': candidate['quality_assessment']  # Preserve full quality data
         })
     
     print(f"\n🎯 Quality-driven search completed!")

@@ -10,10 +10,12 @@ from tools.web_nav import GoTool, ClickTool, TypeTool, KeyTool, JsTool, WaitTool
 from tools.linkedin_auth import CheckAuthTool, NavigateLinkedInTool, PromptLoginTool
 from tools.smart_search import SmartCandidateSearchTool, GetCollectedCandidatesTool
 from tools.targeted_extraction import ExtractCandidateProfilesTool
+from tools.candidate_evaluation import CandidateEvaluationTool
 from tools.candidate_outreach import (
-    BulkEvaluateCandidatesForOutreachTool,  # Used by workflow manager for outreach evaluation
+    CandidateOutreachGenerationTool,  # New agent tool for outreach generation
     SaveOutreachResultsTool  # Used by workflow manager to save outreach results
 )
+from tools.strategy_creation import CreateSearchStrategyTool
 
 
 class LinkedInAgent:
@@ -38,38 +40,33 @@ class LinkedInAgent:
         max_steps = max_steps or AgentConfig().max_steps
 
         # Prepare default tools if none provided
-        if tools is None:
-            tools = [
-                # Navigation tools
-                GoTool,
-                ClickTool,
-                TypeTool,
-                KeyTool,
-                JsTool,
-                WaitTool,
-                # LinkedIn-specific tools
-                CheckAuthTool,
-                NavigateLinkedInTool, 
-                PromptLoginTool,
-                # Profile extraction tools (legacy - for fallback only)
-                # ExtractCompleteProfileTool,  # Commented out - using targeted extraction now
-                # Search and scoring tools (legacy)
-                # SearchPeopleTool,  # Commented out - using smart search now
-                # ScoreCandidateTool,  # Commented out - using new workflow
-                # ScoreMultipleCandidatesTool,  # Commented out - using new workflow
-                # Modern workflow tools  
-                SmartCandidateSearchTool,  # Strategy-based candidate discovery & quality heap
-                GetCollectedCandidatesTool,  # Access heap backup candidates (used in fallback)
-                ExtractCandidateProfilesTool,  # Extract detailed profiles from candidate heap
-                # Outreach tools (used by workflow manager, not directly by agent)
-                BulkEvaluateCandidatesForOutreachTool,  # Evaluate multiple candidates for outreach
-                SaveOutreachResultsTool,  # Save outreach evaluation results
-            ]
+        self.tools = [
+            # Navigation tools
+            GoTool,
+            ClickTool,
+            TypeTool,
+            KeyTool,
+            JsTool,
+            WaitTool,
+            # LinkedIn-specific tools
+            CheckAuthTool,
+            NavigateLinkedInTool, 
+            PromptLoginTool,
+            # Modern agentic workflow tools (5-step process)
+            CreateSearchStrategyTool,  # 1. Generate recruitment strategy
+            SmartCandidateSearchTool,  # 2. Strategy-based candidate discovery & quality heap
+            GetCollectedCandidatesTool,  # 2b. Access heap backup candidates (used in fallback)
+            ExtractCandidateProfilesTool,  # 3. Extract detailed profiles from candidate heap
+            CandidateEvaluationTool,  # 4. Comprehensive quality evaluation with fallback recommendations
+            CandidateOutreachGenerationTool,  # 5. Generate personalized outreach messages
+            # Legacy tools (used by workflow manager for backwards compatibility)
+            SaveOutreachResultsTool,  # Save outreach results to file
+        ]
 
         # Initialize Agent and Runner
         self.agent = Agent(
             name="LinkedInRecruiter",
-            tools=tools,
+            tools=self.tools,
             model_client=model_client,
             model_kwargs=model_kwargs,
             max_steps=max_steps,
@@ -78,11 +75,14 @@ class LinkedInAgent:
         self.runner = Runner(agent=self.agent, max_steps=max_steps)
 
     def call(self, query: str, context: Optional[Dict[str, Any]] = None) -> Any:
-        # Installed AdalFlow Runner expects prompt_kwargs only; context not supported in this version
         return self.runner.call(prompt_kwargs={"input_str": query})
 
     async def acall(self, query: str, context: Optional[Dict[str, Any]] = None) -> Any:
         return await self.runner.acall(prompt_kwargs={"input_str": query})
 
     def add_tool(self, tool: FunctionTool) -> None:
-        self.agent.tools.append(tool)
+        # Note: Tools are now included during agent initialization
+        # This method kept for compatibility but no longer needed for strategy binding
+        self.tools.append(tool)
+        print(f"⚠️  Tool {getattr(tool.fn, '__name__', 'tool')} added to wrapper (agent already initialized with all tools)")
+    

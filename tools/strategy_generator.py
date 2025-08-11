@@ -56,6 +56,44 @@ Return valid JSON with this exact structure:
     "ideal_candidate_description": "detailed description of perfect match",
     "deal_breakers": ["absolute red flags to avoid"]
   },
+  "evaluation_criteria": {
+    "company_tiers": {
+      "tier_1": ["list of top tier companies for max bonus"],
+      "tier_2": ["list of good companies for high bonus"],
+      "target_companies": ["specific companies prioritized for this role"]
+    },
+    "seniority_mapping": {
+      "executive": ["C-level and VP titles"],
+      "principal": ["Principal, Staff, Architect levels"],
+      "senior": ["Senior and Lead levels"],
+      "target_seniority": "preferred level for this role"
+    },
+    "technology_priorities": {
+      "must_have": ["critical technologies - highest bonus"],
+      "preferred": ["valuable technologies - medium bonus"],
+      "complementary": ["nice-to-have technologies - small bonus"]
+    },
+    "education_criteria": {
+      "top_schools": ["elite universities for max education bonus"],
+      "relevant_degrees": ["degrees that are highly relevant"],
+      "preferred_fields": ["fields of study that align with role"]
+    },
+    "bonus_weights": {
+      "company_tier_multiplier": 2.5,
+      "seniority_alignment_multiplier": 2.0,
+      "tech_depth_multiplier": 3.0,
+      "education_multiplier": 2.0,
+      "progression_multiplier": 2.5,
+      "market_alignment_multiplier": 2.0
+    },
+    "role_focus": {
+      "primary_focus": "technical|leadership|product|design",
+      "experience_weight": 0.35,
+      "skills_weight": 0.25,
+      "strategic_weight": 0.20,
+      "education_weight": 0.10
+    }
+  },
   "search_terms": ["optimized LinkedIn search keywords to try"]
 }
 </OUTPUT_FORMAT>
@@ -63,16 +101,19 @@ Return valid JSON with this exact structure:
 <EXAMPLES>
 Query: "senior frontend developer" in "New York"
 Strategy would focus on:
-- Headlines containing "frontend", "front-end", "UI", "React", "Vue"
-- Seniority: "senior", "lead", "staff", "principal"
-- Companies: recognizable tech companies, well-funded startups
-- Profile evaluation: depth of frontend experience, modern frameworks, design collaboration
+- Headlines: "frontend", "front-end", "UI", "React", "Vue"
+- Seniority: "senior", "lead", "staff" (target: senior level)
+- Companies: Tier 1: Google, Facebook; Tier 2: Stripe, Airbnb
+- Tech priorities: Must-have: React, JavaScript; Preferred: TypeScript, CSS
+- Bonus weights: High tech_depth (3.0x), medium company (2.5x)
 
 Query: "product manager" in "San Francisco" 
 Strategy would focus on:
-- Headlines with "product manager", "PM", "product lead", "product owner"
-- Companies: tech companies, startups, B2B/B2C product companies
-- Profile evaluation: product launches, metrics impact, stakeholder management
+- Headlines: "product manager", "PM", "product lead", "product owner"
+- Companies: B2B SaaS, consumer tech, fintech
+- Tech priorities: Must-have: Analytics, A/B testing; Preferred: SQL, Python
+- Bonus weights: High progression (2.5x), high strategic alignment (2.0x)
+- Role focus: Strategic thinking, stakeholder management
 </EXAMPLES>
 
 <INSTRUCTIONS>
@@ -81,6 +122,11 @@ Strategy would focus on:
 - Provide comprehensive guidance for later full profile evaluation
 - Balance quality standards with market realities
 - Consider the specific role requirements and location market
+- Structure evaluation_criteria for systematic bonus calculations
+- Set appropriate bonus multipliers based on role importance
+- Define clear company tiers relevant to the role and location
+- Prioritize technologies based on role criticality (must-have vs nice-to-have)
+- Map seniority levels to role requirements (don't aim too high/low)
 </INSTRUCTIONS>"""
 
 
@@ -131,7 +177,7 @@ class StrategyGenerator:
                 "target_job_titles": [query.lower()],
                 "alternative_titles": query_words,
                 "seniority_keywords": ["senior", "staff", "principal", "lead", "director"],
-                "company_indicators": ["@", "at", "inc", "corp", "ltd"],
+                "company_indicators": ["google", "facebook", "apple", "microsoft", "amazon"],
                 "tech_stack_signals": ["python", "react", "java", "aws", "kubernetes"],
                 "role_relevance_keywords": query_words
             },
@@ -147,6 +193,44 @@ class StrategyGenerator:
                 "experience_evaluation": ["role relevance", "company quality", "tenure"],
                 "ideal_candidate_description": f"Experienced {query} with relevant background",
                 "deal_breakers": ["completely irrelevant experience", "no relevant skills"]
+            },
+            "evaluation_criteria": {
+                "company_tiers": {
+                    "tier_1": ["google", "facebook", "apple", "microsoft", "amazon", "netflix"],
+                    "tier_2": ["uber", "airbnb", "stripe", "dropbox", "slack", "salesforce"],
+                    "target_companies": ["google", "facebook", "netflix", "uber"]
+                },
+                "seniority_mapping": {
+                    "executive": ["cto", "vp", "director", "head of"],
+                    "principal": ["principal", "staff", "architect", "distinguished"],
+                    "senior": ["senior", "lead", "sr."],
+                    "target_seniority": "senior"
+                },
+                "technology_priorities": {
+                    "must_have": ["python", "javascript", "react"],
+                    "preferred": ["aws", "docker", "kubernetes", "sql"],
+                    "complementary": ["typescript", "node.js", "postgresql"]
+                },
+                "education_criteria": {
+                    "top_schools": ["stanford", "mit", "berkeley", "carnegie mellon"],
+                    "relevant_degrees": ["computer science", "software engineering"],
+                    "preferred_fields": ["computer science", "engineering", "mathematics"]
+                },
+                "bonus_weights": {
+                    "company_tier_multiplier": 2.5,
+                    "seniority_alignment_multiplier": 2.0,
+                    "tech_depth_multiplier": 3.0,
+                    "education_multiplier": 2.0,
+                    "progression_multiplier": 2.5,
+                    "market_alignment_multiplier": 2.0
+                },
+                "role_focus": {
+                    "primary_focus": "technical",
+                    "experience_weight": 0.35,
+                    "skills_weight": 0.25,
+                    "strategic_weight": 0.20,
+                    "education_weight": 0.10
+                }
             },
             "search_terms": [query, f"{query} {location}".strip()]
         }
