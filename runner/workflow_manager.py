@@ -81,28 +81,27 @@ class LinkedInWorkflowManager:
                 print("🔍 No candidates from final answer, trying URL re-extraction...")
                 candidates = self._retry_extraction_from_urls(result)
             
-            # Log and save outreach results if agent generated them
-            if agent_results.get("outreach_results"):
-                try:
-                    print("📧 Processing agent outreach results...")
-                    
-                    # Log results if progress tracker available
-                    if progress_tracker:
-                        progress_tracker.log_outreach_evaluation(agent_results["outreach_results"])
-                    
-                    # Save outreach results to file
-                    try:
-                        from tools.candidate_outreach import save_outreach_results
-                        outreach_file = save_outreach_results(agent_results["outreach_results"])
-                        print(f"💾 Outreach results saved to: {outreach_file}")
-                    except Exception as save_error:
-                        print(f"⚠️  Could not save outreach results: {save_error}")
-                        
-                except Exception as outreach_error:
-                    print(f"⚠️  Outreach processing failed: {outreach_error}")
-            
             if progress_tracker:
                 progress_tracker.log_completion(candidates)
+                
+                # Process and save outreach results if agent generated them
+                if agent_results.get("outreach_results"):
+                    try:
+                        print("📧 Processing agent outreach results...")
+                        
+                        # Log results 
+                        progress_tracker.log_outreach_evaluation(agent_results["outreach_results"])
+                        
+                        # Save outreach results to file with other results
+                        try:
+                            from tools.candidate_outreach import save_outreach_results
+                            outreach_file = save_outreach_results(agent_results["outreach_results"])
+                            print(f"💾 Outreach results saved to: {outreach_file}")
+                        except Exception as save_error:
+                            print(f"⚠️  Could not save outreach results: {save_error}")
+                            
+                    except Exception as outreach_error:
+                        print(f"⚠️  Outreach processing failed: {outreach_error}")
             
             self.results = candidates
             print(f"\n📊 Total candidates extracted from agent: {len(candidates)}")
