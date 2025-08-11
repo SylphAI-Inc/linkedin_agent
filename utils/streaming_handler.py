@@ -146,16 +146,24 @@ class StreamingHandler:
         self.log_step("completion", details, "completed")
     
     def log_outreach_evaluation(self, outreach_summary: Dict[str, Any]):
-        """Log outreach evaluation results"""
+        """Log outreach evaluation results - updated for new outreach tool format"""
+        total_generated = outreach_summary.get("outreach_generated", 0)
+        recommended_count = outreach_summary.get("recommended_count", 0)
+        success = outreach_summary.get("success", False)
+        
+        # Calculate rate
+        rate = f"{(recommended_count/total_generated*100):.0f}%" if total_generated > 0 else "0%"
+        
         details = {
-            "total_evaluated": outreach_summary.get("total_evaluated", 0),
-            "recommended_for_outreach": outreach_summary.get("recommended_for_outreach", 0),
-            "outreach_rate": outreach_summary.get("outreach_rate", "0%"),
-            "outreach_file": outreach_summary.get("saved_to", "Not saved")
+            "total_evaluated": total_generated,
+            "recommended_for_outreach": recommended_count,
+            "outreach_rate": rate,
+            "outreach_success": success,
+            "generation_timestamp": outreach_summary.get("generation_timestamp", "")
         }
         
         self.log_step("outreach_evaluation", details, "completed")
-        print(f"📨 Outreach evaluation complete: {details['recommended_for_outreach']}/{details['total_evaluated']} candidates recommended")
+        print(f"📨 Outreach generation complete: {recommended_count}/{total_generated} messages generated ({rate})")
     
     def log_error(self, error_type: str, error_message: str, context: Optional[Dict[str, Any]] = None):
         """Log an error that occurred"""
@@ -328,16 +336,19 @@ class AgentProgressTracker:
             print(f"✅ Workflow completed successfully!")
     
     def log_outreach_evaluation(self, outreach_summary: Dict[str, Any]):
-        """Log outreach evaluation results"""
+        """Log outreach evaluation results - updated for new outreach tool format"""
         if self.streamer:
             self.streamer.log_outreach_evaluation(outreach_summary)
         
-        # Also print a summary to console
-        total = outreach_summary.get("total_evaluated", 0)
-        recommended = outreach_summary.get("recommended_for_outreach", 0)
-        rate = outreach_summary.get("outreach_rate", "0%")
+        # Also print a summary to console with new format
+        total_generated = outreach_summary.get("outreach_generated", 0)
+        recommended_count = outreach_summary.get("recommended_count", 0)
+        success = outreach_summary.get("success", False)
         
-        print(f"📨 Outreach evaluation complete: {recommended}/{total} candidates recommended ({rate})")
+        # Calculate rate
+        rate = f"{(recommended_count/total_generated*100):.0f}%" if total_generated > 0 else "0%"
+        
+        print(f"📨 Outreach generation complete: {recommended_count}/{total_generated} messages generated ({rate})")
     
     def log_error(self, error_type: str, message: str, context: Optional[Dict] = None):
         if self.streamer:
