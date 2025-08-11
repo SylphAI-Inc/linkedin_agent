@@ -7,17 +7,12 @@ from adalflow.core.func_tool import FunctionTool
 
 from config import AgentConfig, get_model_kwargs
 from tools.web_nav import GoTool, ClickTool, TypeTool, KeyTool, JsTool, WaitTool
-from tools.people_search import SearchPeopleTool
 from tools.linkedin_auth import CheckAuthTool, NavigateLinkedInTool, PromptLoginTool
-from tools.profile_extractor import ExtractCompleteProfileTool
-# from tools.candidate_scorer import ScoreCandidateTool, ScoreMultipleCandidatesTool  # Commented out - using new workflow
-from tools.smart_search import SmartCandidateSearchTool, GetCollectedCandidatesTool, ClearCandidateCollectionTool
-from tools.targeted_extraction import ExtractCandidateProfilesTool, GetExtractionSummaryTool
+from tools.smart_search import SmartCandidateSearchTool, GetCollectedCandidatesTool
+from tools.targeted_extraction import ExtractCandidateProfilesTool
 from tools.candidate_outreach import (
-    EvaluateCandidateForOutreachTool, 
-    BulkEvaluateCandidatesForOutreachTool,
-    GetOutreachSummaryTool,
-    SaveOutreachResultsTool
+    BulkEvaluateCandidatesForOutreachTool,  # Used by workflow manager for outreach evaluation
+    SaveOutreachResultsTool  # Used by workflow manager to save outreach results
 )
 
 
@@ -62,17 +57,13 @@ class LinkedInAgent:
                 # SearchPeopleTool,  # Commented out - using smart search now
                 # ScoreCandidateTool,  # Commented out - using new workflow
                 # ScoreMultipleCandidatesTool,  # Commented out - using new workflow
-                # New workflow tools
-                SmartCandidateSearchTool,  # Strategy-based candidate discovery
-                GetCollectedCandidatesTool,  # Get quality candidate URLs
-                ClearCandidateCollectionTool,  # Clear candidate collection
-                ExtractCandidateProfilesTool,  # Extract profiles from URLs
-                GetExtractionSummaryTool,  # Extraction status summary
-                # Outreach tools
-                EvaluateCandidateForOutreachTool,  # Evaluate single candidate for outreach
-                BulkEvaluateCandidatesForOutreachTool,  # Evaluate multiple candidates
-                GetOutreachSummaryTool,  # Get outreach evaluation summary
-                SaveOutreachResultsTool,  # Save outreach results to file
+                # Modern workflow tools  
+                SmartCandidateSearchTool,  # Strategy-based candidate discovery & quality heap
+                GetCollectedCandidatesTool,  # Access heap backup candidates (used in fallback)
+                ExtractCandidateProfilesTool,  # Extract detailed profiles from candidate heap
+                # Outreach tools (used by workflow manager, not directly by agent)
+                BulkEvaluateCandidatesForOutreachTool,  # Evaluate multiple candidates for outreach
+                SaveOutreachResultsTool,  # Save outreach evaluation results
             ]
 
         # Initialize Agent and Runner

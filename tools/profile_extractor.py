@@ -545,7 +545,6 @@ def extract_profile() -> Dict[str, Any]:
     try:
         # Run the proven DOM extraction JavaScript
         raw_data = run_js(PROFILE_JS)
-        
         if not raw_data or not isinstance(raw_data, dict):
             return {
                 "error": "Failed to extract profile data - no data returned",

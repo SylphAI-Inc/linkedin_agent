@@ -144,9 +144,10 @@ def main():
         save_info = workflow.save_results(candidates)  # Error handling now built-in
         
         # Check if save was successful
-        if "Error:" not in str(save_info.get('json_file', '')):
+        if "Error:" not in str(save_info.get('scoring_file', '')):
             print(f"💾 RESULTS SAVED:")
-            print(f"📄 Detailed JSON: {save_info['json_file']}")
+            print(f"📊 Scoring File: {save_info['scoring_file']}")
+            print(f"👥 Candidates File: {save_info['candidates_file']}")
             print(f"📝 Summary Report: {save_info['txt_file']}")
         else:
             print(f"⚠️  Could not save results to files")

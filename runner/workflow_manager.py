@@ -197,7 +197,8 @@ class LinkedInWorkflowManager:
             print(f"⚠️  Failed to save results: {e}")
             print(f"📊 Found {len(candidates)} candidates (unsaved)")
             return {
-                "json_file": "Error: Could not save",
+                "scoring_file": "Error: Could not save",
+                "candidates_file": "Error: Could not save", 
                 "txt_file": "Error: Could not save",
                 "candidates_count": len(candidates)
             }
@@ -294,12 +295,12 @@ class LinkedInWorkflowManager:
         }
     
     def _extract_candidates_from_result(self, result) -> List[Dict[str, Any]]:
-        """Extract candidate data from agent result with deduplication"""
+        """Extract detailed candidate profiles from agent's extraction results"""
         candidates = []
         seen_profiles = set()  # Track seen profiles to avoid duplicates
         
         if hasattr(result, 'step_history'):
-            # Process step history to find profile extractions (both extract_profile and extract_complete_profile)
+            # Process step history to find detailed profile extraction results
             for step in result.step_history:
                 # Handle both action and function attributes from AdalFlow steps
                 action = getattr(step, 'action', None)
@@ -310,32 +311,7 @@ class LinkedInWorkflowManager:
                 func_obj = action or function
                 func_name = getattr(func_obj, 'name', None) if func_obj else None
                 
-                if func_name == 'smart_candidate_search':
-                    # Handle quality-driven search results
-                    if observation and isinstance(observation, dict) and observation.get('quality_candidates'):
-                        search_candidates = observation.get('quality_candidates', [])
-                        print(f"🔍 Processing {len(search_candidates)} candidates from smart_candidate_search")
-                        
-                        for candidate in search_candidates:
-                            if isinstance(candidate, dict):
-                                url = candidate.get('url', 'Unknown URL')
-                                if url not in seen_profiles:
-                                    seen_profiles.add(url)
-                                    # Convert quality search candidate to standard format
-                                    candidates.append({
-                                        "search_info": {
-                                            "url": url,
-                                            "headline_score": candidate.get('quality_assessment', {}).overall_score if candidate.get('quality_assessment') else 0
-                                        },
-                                        "profile_details": {
-                                            "name": candidate.get('name', ''),
-                                            "headline": candidate.get('headline', ''),
-                                            "url": url,
-                                            "quality_assessment": candidate.get('quality_assessment').__dict__ if candidate.get('quality_assessment') else {}
-                                        }
-                                    })
-                
-                elif func_name == 'extract_candidate_profiles':
+                if func_name == 'extract_candidate_profiles':
                     # Handle batch profile extraction results
                     if observation and isinstance(observation, dict) and observation.get('results'):
                         batch_results = observation.get('results', [])

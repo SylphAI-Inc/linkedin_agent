@@ -84,7 +84,8 @@ def smart_candidate_search(
     location: str, 
     strategy: Dict[str, Any],
     page_limit: int = 3,
-    min_score_threshold: float = 5.0,
+    start_page: int = 0,
+    min_score_threshold: float = 7.0,
     target_candidate_count: Optional[int] = None,
     quality_mode: str = "adaptive",  # "adaptive", "quality_first", "fast"
     extraction_quality_gate: float = 5.0  # Minimum heap average to proceed with extraction
@@ -96,7 +97,8 @@ def smart_candidate_search(
         query: Search query (role/title)
         location: Geographic location  
         strategy: AI-generated search strategy
-        page_limit: Initial max pages to search (may be extended based on quality)
+        page_limit: Number of pages to search from start_page
+        start_page: Page number to start searching from (0-indexed, allows continuation)
         min_score_threshold: Minimum headline score to include candidate
         target_candidate_count: Desired number of candidates (adaptive system may adjust)
         quality_mode: "adaptive" = extend search for quality, "quality_first" = prioritize quality over quantity, "fast" = respect hard limits
@@ -144,8 +146,12 @@ def smart_candidate_search(
     
     try:
         # Main search loop with adaptive extension
-        current_page_limit = budget.initial_page_limit
-        page = 0
+        current_page_limit = start_page + page_limit  # End page = start + limit
+        page = start_page  # Start from specified page
+        
+        if start_page > 0:
+            print(f"🔄 Continuing search from page {start_page + 1} (searched {start_page} pages previously)")
+            search_decisions.append(f"continued_from_page_{start_page + 1}")
         
         while page < current_page_limit:
             print(f"📖 Searching page {page + 1}/{current_page_limit}")
@@ -254,7 +260,7 @@ def smart_candidate_search(
             time.sleep(3)
             # Move to next page
             page += 1
-            pages_searched = page
+            pages_searched = page - start_page  # Pages searched in this call
     
     except Exception as e:
         print(f"❌ Search error: {e}")
@@ -267,6 +273,9 @@ def smart_candidate_search(
             "total_candidates": 0,
             "search_query": search_query,
             "quality_threshold": min_score_threshold,
+            "start_page": start_page,
+            "end_page": page if 'page' in locals() else start_page,
+            "next_start_page": page if 'page' in locals() else start_page,
             "quality_stats": {"count": 0, "average": 0},
             "quality_candidates": [],
             "search_decisions": search_decisions,
@@ -342,6 +351,11 @@ def smart_candidate_search(
         "total_candidates": final_stats['count'],  # From quality heap
         "search_query": search_query,
         "quality_threshold": min_score_threshold,
+        
+        # Page continuation information
+        "start_page": start_page,
+        "end_page": page,  # Last page processed 
+        "next_start_page": page,  # Where to continue from next time
         
         # Quality system results
         "quality_stats": final_stats,
