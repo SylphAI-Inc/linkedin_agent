@@ -38,11 +38,9 @@ def evaluate_candidates_quality(
     # Get candidates from various sources
     if candidates is None:
         print(f"📥 PHASE 1: Loading candidates from available sources...")
-        time.sleep(3)
         candidates = _get_candidates_from_sources()
     else:
         print(f"📥 PHASE 1: Using provided candidates for evaluation...")
-        time.sleep(3)
     
     if not candidates:
         return {
@@ -54,11 +52,9 @@ def evaluate_candidates_quality(
             "quality_candidates": []
         }
     print(f"candidates: {candidates}")
-    time.sleep(5)
     
     print(f"📊 PHASE 2: Starting individual candidate assessment...")
     print(f"   Processing {len(candidates)} candidates with strategic criteria")
-    time.sleep(3)
     
     # Comprehensive evaluation
     evaluated_candidates = []
@@ -72,7 +68,6 @@ def evaluate_candidates_quality(
     for i, candidate in enumerate(candidates, 1):
         candidate_name = _extract_candidate_name(candidate)
         print(f"   🔍 Evaluating candidate {i}: {candidate_name}")
-        time.sleep(2)  # Shorter sleep per candidate
         
         # Comprehensive quality assessment
         evaluation_result = _evaluate_single_candidate(candidate, strategy, min_quality_threshold)
@@ -95,8 +90,27 @@ def evaluate_candidates_quality(
     # Determine if quality is sufficient
     quality_sufficient = quality_stats["above_threshold"] >= target_count
     
+    # HEAP CLEANUP: Remove low-quality candidates from search heap
+    print(f"\n🧹 HEAP CLEANUP: Removing low-quality candidates from search heap...")
+    try:
+        from tools.smart_search import get_current_search_heap
+        
+        heap = get_current_search_heap()
+        if heap and hasattr(heap, 'remove_low_quality_candidates'):
+            removed_count = heap.remove_low_quality_candidates(min_quality_threshold)
+            remaining_heap_size = len(heap.heap) if hasattr(heap, 'heap') else 0
+            print(f"   🗑️ Removed {removed_count} low-quality candidates from heap")
+            print(f"   📊 Remaining heap size: {remaining_heap_size} candidates")
+            
+            # Check if heap is now too small and needs expansion
+            if remaining_heap_size < target_count:
+                print(f"   ⚠️ Heap size ({remaining_heap_size}) below target ({target_count}) - may trigger search expansion")
+        else:
+            print(f"   ℹ️ No active search heap found - cleanup skipped")
+    except Exception as cleanup_error:
+        print(f"   ⚠️ Heap cleanup failed: {cleanup_error}")
+        
     print(f"\n🤖 PHASE 3: Analyzing results and generating recommendations...")
-    time.sleep(3)
     
     # Generate intelligent fallback recommendation
     fallback_rec = _generate_fallback_recommendation(
@@ -104,14 +118,12 @@ def evaluate_candidates_quality(
     )
     
     print(f"\n📈 PHASE 4: FINAL EVALUATION RESULTS")
-    time.sleep(2)
     print(f"   Average Quality: {avg_score:.2f}")
     print(f"   Quality Range: {min_score:.2f} - {max_score:.2f}")
     print(f"   Above Threshold: {quality_stats['above_threshold']}/{quality_stats['total_evaluated']}")
     print(f"   Quality Sufficient: {'✅ Yes' if quality_sufficient else '❌ No'}")
     print(f"   Recommendation: {fallback_rec['action']}")
     print(f"✅ Candidate evaluation workflow completed!")
-    time.sleep(3)
     
     return {
         "success": True,
@@ -142,7 +154,6 @@ def evaluate_candidates_quality(
 def _get_candidates_from_sources() -> List[Dict[str, Any]]:
     """Get candidates from available sources (extraction results, collector, etc.)"""
     print(f"   📥 Searching for candidate data sources...")
-    time.sleep(2)
     candidates = []
     
     try:
@@ -195,7 +206,6 @@ def _evaluate_single_candidate(candidate: Dict[str, Any], strategy: Optional[Dic
     """Comprehensive evaluation of a single candidate using strategy-driven criteria"""
     
     print(f"      🎯 Applying strategic evaluation criteria...")
-    time.sleep(1)
     
     # Extract profile data
     profile_data = candidate.get("profile_data", {})
@@ -220,7 +230,6 @@ def _evaluate_single_candidate(candidate: Dict[str, Any], strategy: Optional[Dic
     
     # Calculate strategic bonuses (additive to base scores)
     print(f"      🎆 Calculating strategic bonuses...")
-    time.sleep(1)
     strategic_bonuses = _calculate_strategic_bonuses({
         "name": name,
         "headline": headline,
@@ -247,7 +256,6 @@ def _evaluate_single_candidate(candidate: Dict[str, Any], strategy: Optional[Dic
     
     # Apply final strategic multiplier bonus (up to 15% boost)
     print(f"      ✨ Applying final strategic multiplier...")
-    time.sleep(1)
     final_multiplier = _calculate_final_strategic_multiplier(strategic_bonuses, strategy)
     overall_score *= final_multiplier
     
@@ -473,7 +481,6 @@ def _generate_fallback_recommendation(stats: Dict[str, Any], avg_score: float, q
                                     target_count: int, threshold: float) -> Dict[str, Any]:
     """Generate intelligent fallback recommendations"""
     print(f"   🤔 Analyzing quality distribution and generating recommendations...")
-    time.sleep(2)
     
     if quality_sufficient:
         return {
@@ -486,41 +493,73 @@ def _generate_fallback_recommendation(stats: Dict[str, Any], avg_score: float, q
     total_evaluated = stats["total_evaluated"]
     above_threshold = stats["above_threshold"]
     
+    # Check current heap state after cleanup
+    try:
+        from tools.smart_search import get_current_search_heap
+        heap = get_current_search_heap()
+        remaining_heap_size = len(heap.heap) if heap and hasattr(heap, 'heap') else 0
+    except:
+        remaining_heap_size = 0
+    
     if above_threshold == 0:
-        # No good candidates - try heap first, then expand search, finally lower standards
-        if total_evaluated < 10:  # Haven't tried many candidates yet
+        # No good candidates - check if heap has enough potential or needs expansion
+        candidates_needed = target_count
+        if remaining_heap_size >= candidates_needed:  # Heap has enough to potentially meet target
+            # Calculate proper offset based on how many candidates were already processed
+            processed_count = total_evaluated
             return {
                 "action": "try_heap_backups",
-                "reasoning": f"No quality candidates found. Try more from heap before expanding search.",
-                "params": {"offset": total_evaluated, "limit": 5}
+                "reasoning": f"No quality candidates found. {remaining_heap_size} candidates remain in cleaned heap (enough to meet target).",
+                "params": {"backup_offset": processed_count, "backup_limit": min(remaining_heap_size, 6)}
             }
-        elif avg_score < threshold - 2.0:
+        else:  # Heap too small, expand search to add more candidates
+            # Get the last search page info to continue from where we left off
+            try:
+                from tools.smart_search import get_last_search_info
+                search_info = get_last_search_info()
+                next_page = search_info.get("next_start_page", 3) if search_info else 3
+            except:
+                next_page = 3  # Fallback to page 3
+            
             return {
                 "action": "expand_search_scope", 
-                "reasoning": f"Average score {avg_score:.1f} well below threshold {threshold}. Need more candidates.",
-                "params": {"start_page": 3, "page_limit": 3}
-            }
-        else:
-            return {
-                "action": "lower_quality_threshold",
-                "reasoning": f"Average score {avg_score:.1f} close to threshold. Lower standards as last resort.",
-                "params": {"new_threshold": max(avg_score - 0.5, 4.0)}
+                "reasoning": f"Heap has only {remaining_heap_size} candidates, need {candidates_needed}. Expanding search from page {next_page + 1}.",
+                "params": {"start_page": next_page, "page_limit": 3}
             }
     
     elif above_threshold < target_count // 2:
-        # Some good candidates but not enough - try heap backups first
-        return {
-            "action": "try_heap_backups",
-            "reasoning": f"Found {above_threshold} quality candidates, need {target_count}. Try more from heap.",
-            "params": {"offset": total_evaluated, "limit": target_count - above_threshold + 2}
-        }
+        # Some good candidates but not enough - check if heap can provide the rest
+        candidates_still_needed = target_count - above_threshold
+        if remaining_heap_size >= candidates_still_needed:  # Heap likely has enough
+            # Calculate proper offset based on how many candidates were already processed
+            processed_count = total_evaluated
+            return {
+                "action": "try_heap_backups",
+                "reasoning": f"Found {above_threshold}/{target_count} quality candidates. {remaining_heap_size} remain in heap (enough for target).",
+                "params": {"backup_offset": processed_count, "backup_limit": min(remaining_heap_size, candidates_still_needed + 2)}
+            }
+        else:  # Heap insufficient, expand search to add more candidates
+            # Get the last search page info to continue from where we left off
+            try:
+                from tools.smart_search import get_last_search_info
+                search_info = get_last_search_info()
+                next_page = search_info.get("next_start_page", 3) if search_info else 3
+            except:
+                next_page = 3  # Fallback to page 3
+                
+            return {
+                "action": "expand_search_scope",
+                "reasoning": f"Found {above_threshold}/{target_count} candidates. Heap has only {remaining_heap_size}, need {candidates_still_needed} more. Expanding search from page {next_page + 1}.",
+                "params": {"start_page": next_page, "page_limit": 3}
+            }
     
     else:
         # Close to target - try a few more from heap
+        processed_count = total_evaluated
         return {
             "action": "try_heap_backups",
             "reasoning": f"Close to target with {above_threshold}/{target_count}. Try a few more from heap.",
-            "params": {"offset": total_evaluated, "limit": 3}
+            "params": {"backup_offset": processed_count, "backup_limit": 3}
         }
 
 
@@ -838,7 +877,6 @@ def _get_role_context_from_strategy(strategy: Optional[Dict[str, Any]]) -> str:
 def _calculate_strategic_bonuses(candidate_data: Dict[str, Any], strategy: Optional[Dict[str, Any]]) -> Dict[str, float]:
     """Calculate comprehensive strategic bonuses based on strategy alignment"""
     print(f"        📊 Analyzing strategic alignment...")
-    time.sleep(1)
     
     bonuses = {
         "company_tier_bonus": 0.0,

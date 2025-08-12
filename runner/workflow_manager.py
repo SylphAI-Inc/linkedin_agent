@@ -390,6 +390,9 @@ class LinkedInWorkflowManager:
                         
                         # Assign back to candidate
                         candidate["profile_details"]["quality_assessment"] = quality_assessment
+                        
+                        # IMPORTANT: Add overall_score at top level for outreach compatibility
+                        candidate["overall_score"] = eval_data.get('overall_score', 0.0)
                     
                     # Add outreach data if available
                     if outreach_msg:
