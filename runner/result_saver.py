@@ -10,7 +10,8 @@ from typing import Dict, List, Any
 def save_recruitment_results(candidates: List[Dict[str, Any]], 
                            search_params: Dict[str, Any], 
                            output_dir: str = "results",
-                           strategy_data: Dict[str, Any] = None) -> Dict[str, str]:
+                           strategy_data: Dict[str, Any] = None,
+                           outreach_data: Dict[str, Any] = None) -> Dict[str, str]:
     """Save recruitment results to multiple files: scoring summary + detailed candidate info"""
     
     # Get repo root and create results directory
@@ -99,12 +100,29 @@ def save_recruitment_results(candidates: List[Dict[str, Any]],
             
             f.write("\n")
     
-    return {
+    # Save outreach results separately if provided (for compatibility with existing workflow)
+    outreach_file = None
+    if outreach_data:
+        try:
+            from tools.candidate_outreach import save_outreach_results
+            outreach_file = save_outreach_results(outreach_data)
+            print("📧 Outreach results saved alongside other recruitment data")
+        except Exception as e:
+            print(f"⚠️  Could not save outreach results: {e}")
+            outreach_file = None
+    
+    result = {
         "evaluation_file": str(evaluation_file),
         "candidates_file": str(candidates_file), 
         "txt_file": str(txt_file),
         "candidates_count": len(candidates)
     }
+    
+    # Add outreach file to results if it was saved
+    if outreach_file:
+        result["outreach_file"] = outreach_file
+    
+    return result
 
 
 def _extract_candidate_evaluations(candidates: List[Dict[str, Any]], strategy_data: Dict[str, Any] = None) -> List[Dict[str, Any]]:
