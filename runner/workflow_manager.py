@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 import json
 
-from src.linkedin_agent import LinkedInAgent
+from agents.linkedin_agent import LinkedInAgent
 from utils.role_prompts import RolePromptBuilder
 from config import AgentConfig
 from adalflow.core.func_tool import FunctionTool
