@@ -158,6 +158,39 @@ class CandidateHeap:
             return 100.0
         return (len(self.heap) / self.max_size) * 100.0
     
+    def remove_candidate(self, url: str) -> bool:
+        """Remove a specific candidate from the heap by URL"""
+        if url not in self.seen_urls:
+            return False
+            
+        # Find and remove the item with matching URL
+        original_heap = self.heap[:]
+        self.heap = []
+        self.seen_urls.discard(url)
+        
+        # Rebuild heap without the target URL
+        for score, candidate_url, candidate_data, quality in original_heap:
+            if candidate_url != url:
+                heapq.heappush(self.heap, (score, candidate_url, candidate_data, quality))
+        
+        return True
+    
+    def remove_low_quality_candidates(self, min_threshold: float) -> int:
+        """Remove all candidates below a quality threshold"""
+        removed_count = 0
+        original_heap = self.heap[:]
+        self.heap = []
+        
+        # Rebuild heap keeping only candidates above threshold
+        for score, url, candidate_data, quality in original_heap:
+            if score >= min_threshold:
+                heapq.heappush(self.heap, (score, url, candidate_data, quality))
+            else:
+                self.seen_urls.discard(url)
+                removed_count += 1
+                
+        return removed_count
+    
     def should_continue_search_for_capacity(self, min_capacity_pct: float = 50.0) -> bool:
         """Check if we should continue searching to fill heap capacity"""
         utilization = self.get_capacity_utilization()

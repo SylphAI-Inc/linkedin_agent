@@ -93,10 +93,15 @@ def save_recruitment_results(candidates: List[Dict[str, Any]],
                     if isinstance(exp, dict):
                         f.write(f"  • {_safe_get(exp, 'title', 'N/A')} at {_safe_get(exp, 'company', 'N/A')}\n")
             
-            # Add data quality if available
-            quality = _safe_get(profile_info, 'data_quality', {})
-            if isinstance(quality, dict) and quality.get('completeness_percentage'):
-                f.write(f"Profile Completeness: {quality['completeness_percentage']}%\n")
+            # Add evaluation score if available
+            overall_score = candidate.get('overall_score', 0.0)
+            if overall_score > 0:
+                f.write(f"Evaluation Score: {overall_score:.1f}/10.0\n")
+            else:
+                # Fallback to data quality completeness if no evaluation score
+                quality = _safe_get(profile_info, 'data_quality', {})
+                if isinstance(quality, dict) and quality.get('completeness_percentage'):
+                    f.write(f"Profile Completeness: {quality['completeness_percentage']}%\n")
             
             f.write("\n")
     

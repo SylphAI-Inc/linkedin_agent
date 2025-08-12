@@ -112,18 +112,58 @@ def _generate_message_for_candidate(candidate: Dict[str, Any], position_context:
         candidate_info = candidate['candidate_info']
         headline = profile_data.get('headline', candidate_info.get('headline', ''))
         url = profile_data.get('url', candidate_info.get('url', ''))
-        # Try multiple locations for overall_score
-        overall_score = (
-            candidate.get('overall_score', 0.0) or  # First try top-level (from evaluation)
-            profile_data.get('quality_assessment', {}).get('overall_score', 0.0) or  # Check profile_data quality_assessment
-            candidate_info.get('quality_assessment', {}).get('overall_score', 0.0) or  # Then candidate_info
-            candidate_info.get('overall_score', 0.0)  # Or directly in candidate_info
-        )
+        # Extract overall_score from evaluation result - comprehensive search across all possible locations
+        overall_score = candidate.get('overall_score', 0.0)
+        
+        # If not found at top level, search all possible nested locations
+        if overall_score == 0.0:
+            # Try profile_data locations first
+            overall_score = (
+                profile_data.get('overall_score', 0.0) or
+                profile_data.get('quality_assessment', {}).get('overall_score', 0.0)
+            )
+        
+        # If still not found, try candidate_info locations
+        if overall_score == 0.0:
+            overall_score = (
+                candidate_info.get('overall_score', 0.0) or
+                candidate_info.get('quality_assessment', {}).get('overall_score', 0.0)
+            )
+        
+        # Debug logging to help track down the issue
+        if overall_score == 0.0:
+            print(f"      ⚠️ WARNING: Could not find overall_score for {candidate_name}")
+            print(f"         Top level keys: {list(candidate.keys())}")
+            if 'profile_data' in candidate:
+                print(f"         profile_data keys: {list(profile_data.keys())}")
+                if 'quality_assessment' in profile_data:
+                    qa = profile_data['quality_assessment']
+                    if isinstance(qa, dict):
+                        print(f"         quality_assessment keys: {list(qa.keys())}")
+                    else:
+                        print(f"         quality_assessment type: {type(qa)}")
+            if 'candidate_info' in candidate:
+                print(f"         candidate_info keys: {list(candidate_info.keys())}")
+        else:
+            print(f"      ✅ Found overall_score: {overall_score} for {candidate_name}")
     else:
         profile_data = candidate
         headline = candidate.get('headline', '')
         url = candidate.get('url', '')
         overall_score = candidate.get('overall_score', 0.0)
+        
+        # If not found at top level, try nested locations for flat structure
+        if overall_score == 0.0:
+            overall_score = candidate.get('quality_assessment', {}).get('overall_score', 0.0)
+        
+        # Debug logging for flat structure too
+        if overall_score == 0.0:
+            candidate_name = candidate.get('name', 'Unknown')
+            print(f"      ⚠️ WARNING: Could not find overall_score for {candidate_name} (flat structure)")
+            print(f"         Available keys: {list(candidate.keys())}")
+        else:
+            candidate_name = candidate.get('name', 'Unknown')
+            print(f"      ✅ Found overall_score: {overall_score} for {candidate_name} (flat structure)")
     
     # Build candidate profile for message generation
     candidate_profile = {

@@ -17,6 +17,13 @@ from models.quality_system import (
 )
 
 
+# Global heap reference for cleanup operations
+_current_search_heap = None
+
+def get_current_search_heap():
+    """Get the current search heap for cleanup operations"""
+    return _current_search_heap
+
 class CandidateURLCollector:
     """Collects and manages candidate URLs with deduplication"""
     
@@ -170,6 +177,10 @@ def smart_candidate_search(
     effective_heap_size = max((target_candidate_count or 5) * heap_buffer_multiplier, 20)
     candidate_heap = CandidateHeap(max_size=effective_heap_size, min_score_threshold=min_score_threshold)
     quality_analyzer = QualityAnalyzer(thresholds, budget)
+    
+    # Store heap globally for cleanup operations
+    global _current_search_heap
+    _current_search_heap = candidate_heap
     
     print(f"🔍 Quality-driven search: '{query}' in {location}")
     print(f"📊 Quality mode: {quality_mode}")
