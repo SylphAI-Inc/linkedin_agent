@@ -63,7 +63,7 @@ def generate_candidate_outreach(
         
         try:
             # Generate message directly without evaluation (candidates are pre-qualified)
-            outreach_result = _generate_message_for_candidate(candidate, position_context)
+            outreach_result = _generate_message_for_candidate(candidate, position_context, position_title, location)
             outreach_results.append(outreach_result)
             successful_outreach += 1
                 
@@ -99,7 +99,8 @@ def _extract_candidate_name(candidate: Dict[str, Any]) -> str:
     return candidate.get('name', 'Unknown')
 
 
-def _generate_message_for_candidate(candidate: Dict[str, Any], position_context: str) -> Dict[str, Any]:
+def _generate_message_for_candidate(candidate: Dict[str, Any], position_context: str, 
+                                  position_title: str, location: str) -> Dict[str, Any]:
     """Generate outreach message for a pre-qualified candidate"""
     
     # Extract candidate details
@@ -111,7 +112,12 @@ def _generate_message_for_candidate(candidate: Dict[str, Any], position_context:
         candidate_info = candidate['candidate_info']
         headline = profile_data.get('headline', candidate_info.get('headline', ''))
         url = profile_data.get('url', candidate_info.get('url', ''))
-        overall_score = candidate_info.get('quality_assessment', {}).get('overall_score', 0.0)
+        # Try multiple locations for overall_score
+        overall_score = (
+            candidate.get('overall_score', 0.0) or  # First try top-level (from evaluation)
+            candidate_info.get('quality_assessment', {}).get('overall_score', 0.0) or  # Then nested
+            candidate_info.get('overall_score', 0.0)  # Or directly in candidate_info
+        )
     else:
         profile_data = candidate
         headline = candidate.get('headline', '')
@@ -131,12 +137,27 @@ def _generate_message_for_candidate(candidate: Dict[str, Any], position_context:
         "about": profile_data.get("about", "")
     }
     
-    # Generate personalized message using outreach manager
+    # Generate LLM-powered personalized message using outreach manager
     manager = CandidateOutreachManager()
     
     try:
-        # Generate simple personalized message without evaluation
-        message = _create_simple_outreach_message(candidate_profile, position_context)
+        # Convert position_context string to structured dict for LLM
+        position_dict = _parse_position_context(position_context, position_title, location)
+        
+        # Use LLM-powered outreach generation instead of template
+        outreach_result = manager.evaluate_candidate_for_outreach(
+            candidate_profile, 
+            position_dict
+        )
+        
+        # Extract message from LLM result
+        if outreach_result.get("recommend_outreach") and outreach_result.get("personalized_message"):
+            message = outreach_result["personalized_message"]
+        elif outreach_result.get("message"):
+            message = outreach_result["message"]
+        else:
+            # Fallback to enhanced template if LLM fails
+            message = _create_enhanced_outreach_message(candidate_profile, position_context)
         
         return {
             "name": candidate_name,
@@ -157,44 +178,225 @@ def _generate_message_for_candidate(candidate: Dict[str, Any], position_context:
         }
 
 
-def _create_simple_outreach_message(candidate_profile: Dict[str, Any], position_context: str) -> str:
-    """Create a simple outreach message template for pre-qualified candidates"""
+# Note: Removed _create_simple_outreach_message - replaced with LLM generation + enhanced fallback
+
+
+def _extract_company_from_headline(headline: str) -> str:
+    """Extract company name from headline like 'Software Engineer@Google' or 'Engineer at Meta'"""
+    if not headline:
+        return ""
+    
+    # Common patterns in LinkedIn headlines
+    patterns = [
+        r'@(\w+)',  # "Software Engineer@Google"
+        r' at (\w+)',  # "Engineer at Meta"
+        r'@(\w+\s+\w+)',  # "Engineer@JP Morgan" (two words)
+        r' at ([\w\s]+?)(?:\s*\||$)',  # "Engineer at JP Morgan | ..." (stop at | or end)
+    ]
+    
+    for pattern in patterns:
+        import re
+        match = re.search(pattern, headline, re.IGNORECASE)
+        if match:
+            company = match.group(1).strip()
+            # Clean up common suffixes
+            company = re.sub(r'\s*\|\s*.*$', '', company)  # Remove everything after |
+            return company
+    
+    return ""
+
+
+def _parse_position_context(position_context: str, position_title: str, location: str) -> Dict[str, Any]:
+    """Parse position context string into structured dict for LLM"""
+    
+    # Extract from context string
+    context_dict = {
+        "title": position_title,
+        "location": location,
+        "experience_level": "3-8 years",
+        "technologies": [],
+        "company_type": "Tech company",
+        "remote_policy": "Hybrid/Remote-friendly"
+    }
+    
+    # Parse context string for additional info
+    if position_context:
+        lines = position_context.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line.startswith("Required Technologies:") or line.startswith("Key Technologies:"):
+                tech_str = line.split(":")[-1].strip()
+                context_dict["technologies"] = [tech.strip() for tech in tech_str.split(",") if tech.strip()]
+            elif line.startswith("Target Companies:"):
+                companies_str = line.split(":")[-1].strip()
+                context_dict["strategy_companies"] = [comp.strip() for comp in companies_str.split(",") if comp.strip()]
+            elif line.startswith("Desired Seniority:"):
+                seniority_str = line.split(":")[-1].strip()
+                context_dict["seniority_levels"] = [sen.strip() for sen in seniority_str.split(",") if sen.strip()]
+    
+    return context_dict
+
+
+def _create_enhanced_outreach_message(candidate_profile: Dict[str, Any], position_context: str) -> str:
+    """Enhanced fallback message generation using our personalization logic"""
     
     name = candidate_profile.get("name", "")
     headline = candidate_profile.get("headline", "")
-    current_company = candidate_profile.get("current_company", "")
+    experiences = candidate_profile.get("experiences", [])
+    education = candidate_profile.get("education", [])
+    skills = candidate_profile.get("skills", [])
+    about = candidate_profile.get("about", "")
     
     # Extract position details from context
-    position_parts = position_context.split('\n')
     position_title = "Software Engineer"
     location = "San Francisco"
     
-    for part in position_parts:
-        if "Position:" in part:
-            position_title = part.split("Position:")[-1].strip()
-        elif "Location:" in part:
-            location = part.split("Location:")[-1].strip()
+    if position_context:
+        lines = position_context.split('\n')
+        for line in lines:
+            if "Position:" in line:
+                position_title = line.split("Position:")[-1].strip()
+            elif "Location:" in line:
+                location = line.split("Location:")[-1].strip()
     
-    # Create personalized message
+    # Build personalized content using our enhanced logic
+    personalization = _build_personalization_content(
+        name, headline, experiences, education, skills, about, position_title
+    )
+    
+    # Create enhanced message
     message = f"""Hi {name},
 
-I came across your profile and was impressed by your experience as {headline}. Your background particularly caught my attention given your work at {current_company}.
+{personalization['opening']}
 
-We have an exciting {position_title} opportunity in {location} that I think would be a great fit for your skills and experience. The role offers:
+{personalization['connection']}
 
-• Work with cutting-edge technology and innovative projects
-• Collaborative team environment with growth opportunities  
-• Competitive compensation and comprehensive benefits
-• Flexible work arrangements
+{personalization['opportunity']}
 
-Would you be open to a brief conversation about this opportunity? I'd love to learn more about your current interests and share details about the role.
-
-Looking forward to connecting!
+{personalization['closing']}
 
 Best regards,
 [Your Name]"""
 
     return message
+
+
+def _build_personalization_content(name: str, headline: str, experiences: List[Dict], 
+                                  education: List[Dict], skills: List[str], 
+                                  about: str, position_title: str) -> Dict[str, str]:
+    """Build personalized message content using candidate's rich profile data"""
+    
+    # Extract current work info
+    current_company = ""
+    current_role = headline
+    years_experience = "several years"
+    
+    if experiences and len(experiences) > 0:
+        current_exp = experiences[0]
+        company = current_exp.get("company", "")
+        title = current_exp.get("title", "")
+        
+        # Use company if available, otherwise extract from headline
+        current_company = company if company else _extract_company_from_headline(headline)
+        current_role = title if title else headline
+        
+        # Estimate years of experience from experience list
+        if len(experiences) >= 3:
+            years_experience = "extensive"
+        elif len(experiences) >= 2:
+            years_experience = "solid"
+    
+    # Extract education highlights
+    education_highlight = ""
+    if education:
+        edu = education[0]
+        school = edu.get("school", "")
+        degree = edu.get("degree", "")
+        if school:
+            if any(prestigious in school.lower() for prestigious in 
+                  ["stanford", "mit", "harvard", "berkeley", "carnegie mellon", "caltech"]):
+                education_highlight = f"I also noticed your {degree} from {school} - impressive background!"
+            elif school:
+                education_highlight = f"I see you studied at {school}."
+    
+    # Extract relevant skills
+    relevant_skills = []
+    tech_keywords = ["python", "java", "javascript", "react", "node", "aws", "docker", 
+                    "kubernetes", "microservices", "api", "database", "sql", "nosql",
+                    "machine learning", "ai", "data", "cloud", "devops", "agile"]
+    
+    if skills:
+        for skill in skills[:10]:  # Check first 10 skills
+            if any(tech in skill.lower() for tech in tech_keywords):
+                relevant_skills.append(skill)
+    
+    # Build opening - personalized based on their profile
+    if current_company and current_company not in ["Unknown", ""]:
+        opening_options = [
+            f"I came across your profile and was impressed by your work as {current_role} at {current_company}.",
+            f"I noticed your impressive background as {current_role} at {current_company}.",
+            f"Your experience as {current_role} at {current_company} really caught my attention."
+        ]
+    else:
+        opening_options = [
+            f"I came across your profile and was impressed by your experience as {current_role}.",
+            f"Your {years_experience} experience as {current_role} really caught my attention.",
+            f"I noticed your impressive background as {current_role}."
+        ]
+    opening = opening_options[hash(name) % len(opening_options)]
+    
+    # Build connection - specific reasons why they're a good fit
+    connection_parts = []
+    
+    if relevant_skills:
+        connection_parts.append(f"Your expertise in {', '.join(relevant_skills[:3])} aligns perfectly with what we're looking for.")
+    
+    if current_company and current_company not in ["Unknown", "", "their current company", "their current role"]:
+        connection_parts.append(f"Your experience at {current_company} demonstrates the high-caliber background we seek.")
+    
+    if education_highlight:
+        connection_parts.append(education_highlight)
+    
+    # If no specific connections found, use professional experience
+    if not connection_parts:
+        connection_parts.append(f"Your {years_experience} professional experience in software development makes you an ideal candidate.")
+    
+    connection = " ".join(connection_parts)
+    
+    # Build opportunity description - tailored to their background
+    opportunity_intro = f"I have an exciting {position_title} opportunity that would be perfect for someone with your background."
+    
+    tech_focus = ""
+    if relevant_skills:
+        if any(skill.lower() in ["python", "javascript", "java"] for skill in relevant_skills):
+            tech_focus = "• Work with modern tech stack including the languages and frameworks you know best"
+        elif any(skill.lower() in ["aws", "cloud", "docker", "kubernetes"] for skill in relevant_skills):
+            tech_focus = "• Lead cloud infrastructure and DevOps initiatives using cutting-edge technologies"
+        else:
+            tech_focus = "• Work with cutting-edge technology and innovative projects"
+    else:
+        tech_focus = "• Work with cutting-edge technology and innovative projects"
+    
+    opportunity_details = f"""The role offers:
+
+{tech_focus}
+• Collaborative team environment with senior engineers and growth opportunities  
+• Competitive compensation package with equity
+• Flexible work arrangements and excellent benefits"""
+    
+    opportunity = f"{opportunity_intro}\n\n{opportunity_details}"
+    
+    # Build closing - specific call to action
+    closing = """Would you be open to a brief 15-minute conversation about this opportunity? I'd love to learn more about your current interests and share specific details about the role and team.
+
+Looking forward to connecting!"""
+    
+    return {
+        "opening": opening,
+        "connection": connection, 
+        "opportunity": opportunity,
+        "closing": closing
+    }
 
 
 def _get_evaluated_candidates() -> List[Dict[str, Any]]:
@@ -271,23 +473,40 @@ def _generate_single_outreach(candidate: Dict[str, Any], position_context: str, 
 
 
 def _extract_current_company(candidate: Dict[str, Any]) -> str:
-    """Extract current company from candidate data"""
-    experiences = candidate.get("experiences", [])
-    if experiences and isinstance(experiences, list):
-        return experiences[0].get("company", "Unknown")
+    """Extract current company from candidate data with proper nested structure handling"""
+    # Handle nested structure: {candidate_info: {...}, profile_data: {...}}
+    if 'profile_data' in candidate:
+        profile_data = candidate['profile_data']
+        experiences = profile_data.get("experiences", [])
+    else:
+        # Flat structure
+        experiences = candidate.get("experiences", [])
+    
+    if experiences and isinstance(experiences, list) and len(experiences) > 0:
+        company = experiences[0].get("company", "")
+        return company if company else "Unknown"
     return "Unknown"
 
 
 def _extract_current_title(candidate: Dict[str, Any]) -> str:
-    """Extract current title from candidate data"""
-    # Try headline first, then experiences
-    headline = candidate.get("headline", "")
-    if headline:
-        return headline
+    """Extract current title from candidate data with proper nested structure handling"""
+    # Handle nested structure first
+    if 'profile_data' in candidate:
+        profile_data = candidate['profile_data']
+        headline = profile_data.get("headline", "")
+        if headline:
+            return headline
+        experiences = profile_data.get("experiences", [])
+    else:
+        # Flat structure
+        headline = candidate.get("headline", "")
+        if headline:
+            return headline
+        experiences = candidate.get("experiences", [])
     
-    experiences = candidate.get("experiences", [])
-    if experiences and isinstance(experiences, list):
-        return experiences[0].get("title", "Unknown")
+    if experiences and isinstance(experiences, list) and len(experiences) > 0:
+        title = experiences[0].get("title", "")
+        return title if title else "Unknown"
     
     return "Unknown"
 
