@@ -197,12 +197,14 @@ def main():
                 profile = candidate.get("profile_details", {})
                 name = profile.get("name", "Unknown")
                 title = profile.get("headline", "No title")
-                quality = profile.get("data_quality", {})
-                completeness = quality.get("completeness_percentage", "N/A")
+                
+                # Get evaluation score from quality_assessment
+                quality_assessment = profile.get("quality_assessment", {})
+                evaluation_score = quality_assessment.get("overall_score", 0.0)
                 
                 print(f"   {i}. {name}")
                 print(f"      Title: {title}")
-                print(f"      Completeness: {completeness}%")
+                print(f"      Score: {evaluation_score:.1f}/10.0")
             except Exception as display_error:
                 print(f"   {i}. [Error displaying candidate: {display_error}]")
         
