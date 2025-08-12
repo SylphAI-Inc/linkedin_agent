@@ -115,7 +115,8 @@ def _generate_message_for_candidate(candidate: Dict[str, Any], position_context:
         # Try multiple locations for overall_score
         overall_score = (
             candidate.get('overall_score', 0.0) or  # First try top-level (from evaluation)
-            candidate_info.get('quality_assessment', {}).get('overall_score', 0.0) or  # Then nested
+            profile_data.get('quality_assessment', {}).get('overall_score', 0.0) or  # Check profile_data quality_assessment
+            candidate_info.get('quality_assessment', {}).get('overall_score', 0.0) or  # Then candidate_info
             candidate_info.get('overall_score', 0.0)  # Or directly in candidate_info
         )
     else:

@@ -9,7 +9,8 @@ from tools.strategy_generator import StrategyGenerator
 
 def create_search_strategy(
     query: str,
-    location: str = "Any Location"
+    location: str = "Any Location",
+    job_description: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Create a comprehensive recruitment strategy for the given role and location
@@ -17,16 +18,21 @@ def create_search_strategy(
     Args:
         query: The job role to search for (e.g., "Senior Software Engineer")
         location: Target location for candidates
+        job_description: Optional job description text for enhanced strategy
         
     Returns:
         Comprehensive strategy dict with evaluation criteria and search guidance
     """
     
     print(f"🎯 Creating search strategy for: '{query}' in {location}")
+    if job_description:
+        print(f"📋 Using job description text for enhanced strategy ({len(job_description)} chars)")
     
     try:
         generator = StrategyGenerator()
-        strategy_result = generator.create_search_strategy(query, location)
+        
+        # Use strategy generation with job description if provided
+        strategy_result = generator.create_search_strategy(query, location, job_description)
         
         # Convert to dict if it's a dataclass
         if hasattr(strategy_result, 'to_dict'):

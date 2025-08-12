@@ -140,19 +140,19 @@ def _extract_candidate_evaluations(candidates: List[Dict[str, Any]], strategy_da
         
         # Add complete evaluation results if available
         quality = candidate.get("profile_details", {}).get("quality_assessment")
-        if quality and isinstance(quality, dict):
+        if quality:
             # Store all evaluation results as-is from the evaluation tool
             evaluation_data.update({
-                "overall_score": quality.get("overall_score", 0.0),
-                "component_scores": quality.get("component_scores", {}),
-                "strategic_bonuses": quality.get("strategic_bonuses", {}),
-                "scoring_weights": quality.get("scoring_weights", {}),
-                "final_multiplier": quality.get("final_multiplier", 1.0),
-                "meets_threshold": quality.get("meets_threshold", False),
-                "strengths": quality.get("strengths", []),
-                "concerns": quality.get("concerns", []),
-                "evaluation_timestamp": quality.get("evaluation_timestamp", ""),
-                "baseline_scores": quality.get("baseline_scores", {})
+                "overall_score": _safe_get_dict(quality, "overall_score", 0.0),
+                "component_scores": _safe_get_dict(quality, "component_scores", {}),
+                "strategic_bonuses": _safe_get_dict(quality, "strategic_bonuses", {}),
+                "scoring_weights": _safe_get_dict(quality, "scoring_weights", {}),
+                "final_multiplier": _safe_get_dict(quality, "final_multiplier", 1.0),
+                "meets_threshold": _safe_get_dict(quality, "meets_threshold", False),
+                "strengths": _safe_get_dict(quality, "strengths", []),
+                "concerns": _safe_get_dict(quality, "concerns", []),
+                "evaluation_timestamp": _safe_get_dict(quality, "evaluation_timestamp", ""),
+                "baseline_scores": _safe_get_dict(quality, "baseline_scores", {})
             })
         else:
             # Fallback for candidates without evaluation
@@ -211,7 +211,28 @@ def _extract_candidate_details(candidates: List[Dict[str, Any]]) -> List[Dict[st
 
 
 def _safe_get(obj: Any, key: str, default: str = 'N/A') -> str:
-    """Safely get value from dict-like object"""
+    """Safely get value from dict-like object or dataclass"""
     if isinstance(obj, dict):
         return str(obj.get(key, default))
+    elif hasattr(obj, key):  # Handle dataclasses
+        return str(getattr(obj, key, default))
     return default
+
+def _safe_get_dict(obj: Any, key: str, default: Any = None) -> Any:
+    """Safely get value from dict-like object or dataclass, preserving type"""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    elif hasattr(obj, key):  # Handle dataclasses
+        return getattr(obj, key, default)
+    return default
+
+def _convert_to_dict(obj: Any) -> Any:
+    """Convert dataclass or object to dict if possible"""
+    if isinstance(obj, dict):
+        return obj
+    elif hasattr(obj, '__dict__'):
+        return obj.__dict__
+    elif hasattr(obj, 'to_dict'):
+        return obj.to_dict()
+    else:
+        return obj
