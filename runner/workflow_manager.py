@@ -7,6 +7,8 @@ from typing import Dict, List, Any
 from datetime import datetime
 from pathlib import Path
 import json
+import time
+from utils.logger import get_logger, log_info, log_debug, log_error, log_agent_step, log_phase_start, log_phase_end, log_progress
 
 from agents.linkedin_agent import LinkedInAgent
 from utils.role_prompts import RolePromptBuilder
@@ -49,32 +51,56 @@ class LinkedInWorkflowManager:
     
     def execute_search_workflow(self, progress_tracker=None) -> List[Dict[str, Any]]:
         """Step 3: Execute the complete agentic workflow"""
-        print(f"🔍 Starting agentic recruitment workflow...")
-        print(f"📊 Target: {self.limit} candidates")
+        logger = get_logger()
+        logger.set_workflow_context("workflow_main", "initialization")
+        
+        log_phase_start("WORKFLOW_START", f"Target: {self.limit} candidates for {self.query} in {self.location}")
         
         candidates = []
+        start_time = time.time()
         
         try:
+            log_info("🤖 Initializing LinkedIn agent for agentic workflow")
             agent, prompt = self.initialize_agent()
             
             if progress_tracker:
                 progress_tracker.start_workflow()
             
+            log_phase_start("AGENT_EXECUTION", "Running 5-phase agentic workflow")
+            log_progress("Sending prompt to agent", "AGENT_CALL")
+            
             # Execute agent workflow
             result = agent.call(query=prompt)
             
-            # Print agent execution steps (same format as original runner)
+            log_progress("Agent execution completed, processing results", "AGENT_RESULT")
+            
+            # Print agent execution steps with enhanced logging
             self._print_agent_execution_steps(result)
             
             # Process results from 4-step agentic workflow
             agent_results = self._extract_results_from_agent(result)
-            candidates = agent_results["candidates"]
             
-            # Store strategy data for enhanced scoring
-            self.strategy_data = agent_results.get("strategy_results")
+            # Get candidates from global state (new architecture)
+            from core.workflow_state import get_complete_workflow_data
+            workflow_data = get_complete_workflow_data()
             
-            # Store outreach results for saving in Step 3
-            self.outreach_results = agent_results.get("outreach_results")
+            # Build proper candidate structure for result saving by combining extraction and evaluation data
+            candidates = self._build_complete_candidate_data(workflow_data)
+            
+            log_info(f"🔍 Global state candidates found: {len(candidates)}", phase="WORKFLOW_RESULTS")
+            if len(candidates) > 0:
+                log_info(f"🔍 First candidate keys: {list(candidates[0].keys())}", phase="WORKFLOW_RESULTS")
+            
+            # Fallback to agent results if global state is empty
+            if not candidates:
+                log_info(f"🔍 No candidates in global state, falling back to agent results", phase="WORKFLOW_RESULTS")
+                candidates = agent_results["candidates"]
+            
+            # Store strategy data for enhanced scoring from global state
+            self.strategy_data = workflow_data.get("strategy", agent_results.get("strategy_results"))
+            
+            # Store outreach results for saving in Step 3 from global state
+            self.outreach_results = workflow_data.get("outreach_results", agent_results.get("outreach_results"))
             
             # If no candidates from step history, try extracting from final answer
             if len(candidates) == 0:
@@ -123,20 +149,23 @@ class LinkedInWorkflowManager:
             return candidates
     
     def _print_agent_execution_steps(self, result) -> None:
-        """Print agent execution steps using same format as original runner"""
+        """Print agent execution steps with enhanced logging"""
         try:
             # Define steps before conditional block to avoid variable scoping issues
             steps = getattr(result, "step_history", getattr(result, "steps", []))
             
-            print("Run complete. Steps:")
+            log_phase_start("AGENT_STEPS", f"Processing {len(steps)} agent execution steps")
             
             if not steps:
-                print("No steps recorded - agent may have encountered parsing issues")
-            print(f"Result: {result}")
+                log_error("No steps recorded - agent may have encountered parsing issues")
+                return
+                
+            log_debug(f"Agent result object: {result}")
             
-            # Extract candidates from agent steps (same logic as original)
+            # Process each agent step with enhanced logging
             for i, s in enumerate(steps, 1):
-                print(i, getattr(s, 'thought', getattr(s, 'action', 'step')))
+                thought = getattr(s, 'thought', getattr(s, 'action', 'step'))
+                log_info(f"{i} Function(thought='{thought}')", phase="AGENT_STEP")
                 
                 # Handle Function objects from AdalFlow - check step structure
                 # Steps have: step, action (Function), function (Function), observation
@@ -158,13 +187,15 @@ class LinkedInWorkflowManager:
                 tool_result = observation
                 
                 if tool_name:
-                    print("  ->", tool_name, tool_kwargs or tool_args, "=>", (str(tool_result)[:120] if tool_result is not None else None))
-                
-                import time
-                time.sleep(0.1)
+                    # Use enhanced logging for agent steps
+                    log_agent_step(i, tool_name, tool_kwargs or {}, tool_result)
+                    
+                    # Also log to debug with more detail
+                    result_preview = str(tool_result)[:200] if tool_result is not None else "None"
+                    log_debug(f"  -> {tool_name}({tool_kwargs or tool_args}) => {result_preview}")
                 
         except Exception as e:
-            print(f"Error printing agent steps: {e}")
+            log_error(f"Error processing agent steps: {e}", exception=e)
     
     def save_results(self, candidates: List[Dict[str, Any]], output_dir: str = "results", strategy_data: Dict[str, Any] = None) -> Dict[str, str]:
         """Step 4: Save recruitment results with error handling"""
@@ -189,11 +220,59 @@ class LinkedInWorkflowManager:
             print(f"⚠️  Failed to save results: {e}")
             print(f"📊 Found {len(candidates)} candidates (unsaved)")
             return {
+                "outreach_file": "Error: Could not save",
                 "evaluation_file": "Error: Could not save",
                 "candidates_file": "Error: Could not save", 
                 "txt_file": "Error: Could not save",
                 "candidates_count": len(candidates)
             }
+    
+    def _build_complete_candidate_data(self, workflow_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Build complete candidate data structure by combining extraction and evaluation results"""
+        extraction_results = workflow_data.get("extraction_results", [])
+        evaluation_results = workflow_data.get("evaluation_results", [])
+        search_results = workflow_data.get("search_results", [])
+        
+        if not extraction_results:
+            return []
+        
+        candidates = []
+        
+        # Create lookup dictionaries for easy matching
+        eval_by_name = {eval_data.get("name", "").lower(): eval_data for eval_data in evaluation_results}
+        search_by_name = {search_data.get("name", "").lower(): search_data for search_data in search_results}
+        
+        for extracted_profile in extraction_results:
+            # Get the extracted profile data
+            profile_data = extracted_profile.get("profile_data", {})
+            candidate_info = extracted_profile.get("candidate_info", {})
+            
+            # Get candidate name for matching
+            candidate_name = profile_data.get("name", candidate_info.get("name", "")).lower()
+            
+            # Find matching evaluation and search data
+            eval_data = eval_by_name.get(candidate_name, {})
+            search_data = search_by_name.get(candidate_name, candidate_info)
+            
+            # Build complete candidate structure expected by result saver
+            complete_candidate = {
+                "profile_details": {
+                    **profile_data,
+                    "quality_assessment": eval_data  # Add evaluation data as quality_assessment
+                },
+                "search_info": {
+                    "name": candidate_name.title(),
+                    "url": search_data.get("url", candidate_info.get("url", "")),
+                    "headline": search_data.get("headline", profile_data.get("headline", "")),
+                    "headline_score": search_data.get("headline_score", 0.0),
+                    "normalized_url": search_data.get("normalized_url", ""),
+                    "quality_assessment": search_data.get("quality_assessment", {})
+                }
+            }
+            
+            candidates.append(complete_candidate)
+        
+        return candidates
     
     def _build_agentic_prompt(self) -> str:
         """Build prompt for agentic workflow with strategy generation"""
@@ -299,6 +378,42 @@ class LinkedInWorkflowManager:
         results["candidates"] = candidates
         print(f"📊 Extracted {len(candidates)} candidates from agent workflow")
         
+        # Fallback: If merge failed but global state has data, create basic candidate records
+        if len(candidates) == 0:
+            print(f"🔄 Merge returned 0 candidates, checking global state fallback...")
+            try:
+                from core.workflow_state import get_profiles_for_evaluation, get_evaluation_results, get_outreach_results
+                
+                # Get basic profile data from global state
+                profiles = get_profiles_for_evaluation()
+                eval_data = get_evaluation_results()
+                outreach_data = get_outreach_results()
+                
+                if profiles:
+                    print(f"🔄 Global state has {len(profiles)} profiles, creating fallback candidate records")
+                    fallback_candidates = []
+                    
+                    for profile in profiles:
+                        # Create basic candidate record from global state data
+                        candidate_info = profile.get('candidate_info', {})
+                        profile_data = profile.get('profile_data', {})
+                        
+                        fallback_candidate = {
+                            "search_info": {
+                                "url": candidate_info.get('url', ''),
+                                "headline_score": candidate_info.get('headline_score', 0.0),
+                                "name": profile_data.get('name', candidate_info.get('name', 'Unknown'))
+                            },
+                            "profile_details": profile_data
+                        }
+                        fallback_candidates.append(fallback_candidate)
+                    
+                    results["candidates"] = fallback_candidates
+                    print(f"✅ Created {len(fallback_candidates)} fallback candidate records from global state")
+                    
+            except Exception as e:
+                print(f"⚠️ Global state fallback failed: {e}")
+        
         return results
     
     def _merge_candidate_data(
@@ -311,35 +426,86 @@ class LinkedInWorkflowManager:
         
         candidates = []
         
-        # Start with extraction results (complete profile data)
-        if extraction_results and isinstance(extraction_results, dict):
-            batch_results = extraction_results.get('results', [])
-            print(f"📥 Found {len(batch_results)} extraction results")
+        # Global state architecture: Get actual data from global state instead of function results
+        try:
+            from core.workflow_state import get_profiles_for_evaluation, get_candidates_for_outreach
+            
+            # Get extraction results from global state
+            batch_results = get_profiles_for_evaluation()
+            print(f"📥 Found {len(batch_results)} extraction results from global state")
+            
+        except ImportError:
+            print("⚠️ Global state not available, falling back to function results")
+            # Fallback to old method for backward compatibility
+            batch_results = []
+            if extraction_results and isinstance(extraction_results, dict):
+                batch_results = extraction_results.get('results', [])
+                print(f"📥 Found {len(batch_results)} extraction results from function results")
             
             # Create lookup for evaluation scores by candidate name/URL
             eval_scores = {}
-            if evaluation_results and isinstance(evaluation_results, dict):
-                all_evaluated = evaluation_results.get('all_evaluated_candidates', [])
-                for eval_candidate in all_evaluated:
-                    name = eval_candidate.get('name', '')
-                    url = eval_candidate.get('url', '')
-                    if name or url:
-                        key = name if name else url
-                        eval_scores[key] = eval_candidate
-                print(f"🎯 Found {len(eval_scores)} evaluation scores")
+            
+            # Global state: Get evaluation results from global state
+            try:
+                from core.workflow_state import get_evaluation_results
+                evaluation_data = get_evaluation_results()
+                if evaluation_data and isinstance(evaluation_data, dict):
+                    all_evaluated = evaluation_data.get('all_evaluated_candidates', [])
+                    for eval_candidate in all_evaluated:
+                        name = eval_candidate.get('name', '')
+                        url = eval_candidate.get('url', '')
+                        if name or url:
+                            key = name if name else url
+                            eval_scores[key] = eval_candidate
+                    print(f"🎯 Found {len(eval_scores)} evaluation scores from global state")
+                
+            except (ImportError, AttributeError):
+                # Fallback to function results
+                if evaluation_results and isinstance(evaluation_results, dict):
+                    all_evaluated = evaluation_results.get('all_evaluated_candidates', [])
+                    for eval_candidate in all_evaluated:
+                        name = eval_candidate.get('name', '')
+                        url = eval_candidate.get('url', '')
+                        if name or url:
+                            key = name if name else url
+                            eval_scores[key] = eval_candidate
+                    print(f"🎯 Found {len(eval_scores)} evaluation scores from function results")
             
             # Create lookup for outreach data by candidate name
             outreach_data = {}
-            if outreach_results and isinstance(outreach_results, dict):
-                outreach_messages = outreach_results.get('messages', [])
-                for outreach_msg in outreach_messages:
-                    name = outreach_msg.get('name', '')
-                    if name:
-                        outreach_data[name] = outreach_msg
-                print(f"📧 Found {len(outreach_data)} outreach messages")
+            
+            # Global state: Get outreach results from global state
+            try:
+                from core.workflow_state import get_outreach_results
+                outreach_results_data = get_outreach_results()
+                if outreach_results_data and isinstance(outreach_results_data, dict):
+                    outreach_messages = outreach_results_data.get('messages', [])
+                    for outreach_msg in outreach_messages:
+                        name = outreach_msg.get('name', '')
+                        if name:
+                            outreach_data[name] = outreach_msg
+                    print(f"📧 Found {len(outreach_data)} outreach messages from global state")
+                
+            except (ImportError, AttributeError):
+                # Fallback to function results
+                if outreach_results and isinstance(outreach_results, dict):
+                    outreach_messages = outreach_results.get('messages', [])
+                    for outreach_msg in outreach_messages:
+                        name = outreach_msg.get('name', '')
+                        if name:
+                            outreach_data[name] = outreach_msg
+                    print(f"📧 Found {len(outreach_data)} outreach messages from function results")
             
             # Merge all data sources
-            for result in batch_results:
+            for i, result in enumerate(batch_results):
+                log_debug(f"Processing merge result {i+1}/{len(batch_results)}", phase="MERGE_DATA")
+                log_debug(f"Result type: {type(result)}", phase="MERGE_DATA")
+                if isinstance(result, dict):
+                    log_debug(f"Result keys: {list(result.keys())}", phase="MERGE_DATA")
+                    log_debug(f"Has profile_data: {result.get('profile_data') is not None}", phase="MERGE_DATA")
+                else:
+                    log_debug(f"Result is not dict: {result}", phase="MERGE_DATA")
+                
                 if isinstance(result, dict) and result.get('profile_data'):
                     candidate_info = result.get('candidate_info', {})
                     profile_data = result.get('profile_data', {})

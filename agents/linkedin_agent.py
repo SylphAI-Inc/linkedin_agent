@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Optional
+from utils.logger import log_info, log_debug, log_error, log_progress
 
 from adalflow.components.agent.agent import Agent
 from adalflow.components.agent.runner import Runner
@@ -84,5 +85,5 @@ class LinkedInAgent:
         # Note: Tools are now included during agent initialization
         # This method kept for compatibility but no longer needed for strategy binding
         self.tools.append(tool)
-        print(f"⚠️  Tool {getattr(tool.fn, '__name__', 'tool')} added to wrapper (agent already initialized with all tools)")
+        log_error(f"  Tool {getattr(tool.fn, '__name__', 'tool')} added to wrapper (agent already initialized with all tools)", phase="warning")
     

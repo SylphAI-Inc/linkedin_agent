@@ -8,53 +8,80 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 from adalflow.core.func_tool import FunctionTool
 import time
+from core.workflow_state import get_profiles_for_evaluation, get_strategy_for_search, store_evaluation_results
+from utils.logger import log_info, log_debug, log_error, log_progress, log_phase_start, log_phase_end
 
 
 def evaluate_candidates_quality(
-    candidates: Optional[List[Dict[str, Any]]] = None,
-    strategy: Optional[Dict[str, Any]] = None,
     min_quality_threshold: float = 6.0,
     target_count: int = 5
 ) -> Dict[str, Any]:
     """
-    Comprehensive evaluation of extracted candidate profiles
+    Comprehensive evaluation using global state architecture
     
     Args:
-        candidates: List of extracted candidate profiles (if None, gets from collector)
-        strategy: AI-generated search strategy for context-aware evaluation
         min_quality_threshold: Minimum acceptable quality score
         target_count: Target number of quality candidates needed
         
     Returns:
-        Dict with evaluation results, quality scores, and fallback recommendations
+        Lightweight status dict: {success: True, candidates_evaluated: 10, quality_sufficient: True}
+        Actual evaluation results stored in global state
     """
     
-    print(f"🎯 Starting comprehensive candidate evaluation...")
-    print(f"   Quality threshold: {min_quality_threshold}")
-    print(f"   Target count: {target_count}")
-    print(f"⏳ Initializing evaluation system...")
-    print(f"strategy: {strategy}")
+    log_info(f"🎯 Starting comprehensive candidate evaluation...", phase="EVALUATION")
+    log_info(f"   Quality threshold: {min_quality_threshold}, Target count: {target_count}", phase="EVALUATION")
+    log_progress("Initializing evaluation system", "EVALUATION")
     
-    # Get candidates from various sources
-    if candidates is None:
-        print(f"📥 PHASE 1: Loading candidates from available sources...")
-        candidates = _get_candidates_from_sources()
-    else:
-        print(f"📥 PHASE 1: Using provided candidates for evaluation...")
+    # Get candidates and strategy from global state
+    candidates = get_profiles_for_evaluation()
+    strategy = get_strategy_for_search()
     
+    log_debug(f"Retrieved candidates type: {type(candidates)}", phase="EVALUATION")
+    log_debug(f"Retrieved candidates length: {len(candidates) if isinstance(candidates, list) else 'N/A'}", phase="EVALUATION")
+    if candidates and isinstance(candidates, list):
+        log_debug(f"First candidate keys: {list(candidates[0].keys()) if candidates[0] else 'Empty'}", phase="EVALUATION")
+    
+    # Enhanced debug logging for empty candidates case
     if not candidates:
+        log_error(f"No candidates found in global state for evaluation", phase="EVALUATION")
+        log_debug(f"Checking global workflow state...", phase="EVALUATION")
+        
+        # Import workflow state to check status
+        from core.workflow_state import get_workflow_summary, _workflow_state
+        workflow_status = get_workflow_summary()
+        log_debug(f"Current workflow phase: {workflow_status.get('current_phase')}", phase="EVALUATION")
+        log_debug(f"Candidates extracted: {workflow_status.get('candidates_extracted')}", phase="EVALUATION")
+        log_debug(f"Raw extraction results count: {len(_workflow_state._extraction_results)}", phase="EVALUATION")
+        
+        # Check if extraction results exist but are in wrong format
+        extraction_results = _workflow_state._extraction_results
+        if extraction_results:
+            log_debug(f"Extraction results exist but appear malformed:", phase="EVALUATION")
+            log_debug(f"First extraction result type: {type(extraction_results[0])}", phase="EVALUATION")
+            log_debug(f"First extraction result keys: {list(extraction_results[0].keys()) if isinstance(extraction_results[0], dict) else 'Not dict'}", phase="EVALUATION")
+        
         return {
             "success": False,
-            "error": "No candidates available for evaluation",
+            "error": "No candidates found in global state. Run extract_candidate_profiles first.",
             "quality_sufficient": False,
-            "fallback_recommendation": "search_more_candidates",
             "candidates_evaluated": 0,
-            "quality_candidates": []
+            "debug_info": {
+                "workflow_phase": workflow_status.get('current_phase'),
+                "candidates_extracted_count": workflow_status.get('candidates_extracted'),
+                "raw_extraction_count": len(_workflow_state._extraction_results)
+            }
         }
-    print(f"candidates: {candidates}")
     
-    print(f"📊 PHASE 2: Starting individual candidate assessment...")
-    print(f"   Processing {len(candidates)} candidates with strategic criteria")
+    if not strategy:
+        return {
+            "success": False,
+            "error": "No strategy found in global state. Run create_search_strategy first.",
+            "quality_sufficient": False,
+            "candidates_evaluated": 0
+        }
+    
+    log_info(f"📊 PHASE 2: Starting individual candidate assessment...")
+    log_info(f"   Processing {len(candidates)} candidates with strategic criteria")
     
     # Comprehensive evaluation
     evaluated_candidates = []
@@ -67,7 +94,7 @@ def evaluate_candidates_quality(
     
     for i, candidate in enumerate(candidates, 1):
         candidate_name = _extract_candidate_name(candidate)
-        print(f"   🔍 Evaluating candidate {i}: {candidate_name}")
+        log_info(f"   🔍 Evaluating candidate {i}: {candidate_name}")
         
         # Comprehensive quality assessment
         evaluation_result = _evaluate_single_candidate(candidate, strategy, min_quality_threshold)
@@ -88,10 +115,13 @@ def evaluate_candidates_quality(
     min_score = min(quality_stats["scores"]) if quality_stats["scores"] else 0
     
     # Determine if quality is sufficient
-    quality_sufficient = quality_stats["above_threshold"] >= target_count
+    # If we have fewer total candidates than target, check if we have enough relative to what we evaluated
+    candidates_available = len(candidates)
+    effective_target = min(target_count, candidates_available)
+    quality_sufficient = quality_stats["above_threshold"] >= effective_target
     
     # HEAP CLEANUP: Remove low-quality candidates from search heap
-    print(f"\n🧹 HEAP CLEANUP: Removing low-quality candidates from search heap...")
+    log_info(f"\n🧹 HEAP CLEANUP: Removing low-quality candidates from search heap...")
     try:
         from tools.smart_search import get_current_search_heap
         
@@ -99,33 +129,34 @@ def evaluate_candidates_quality(
         if heap and hasattr(heap, 'remove_low_quality_candidates'):
             removed_count = heap.remove_low_quality_candidates(min_quality_threshold)
             remaining_heap_size = len(heap.heap) if hasattr(heap, 'heap') else 0
-            print(f"   🗑️ Removed {removed_count} low-quality candidates from heap")
-            print(f"   📊 Remaining heap size: {remaining_heap_size} candidates")
+            log_info(f"   🗑️ Removed {removed_count} low-quality candidates from heap")
+            log_info(f"   📊 Remaining heap size: {remaining_heap_size} candidates")
             
             # Check if heap is now too small and needs expansion
             if remaining_heap_size < target_count:
-                print(f"   ⚠️ Heap size ({remaining_heap_size}) below target ({target_count}) - may trigger search expansion")
+                log_info(f"   ⚠️ Heap size ({remaining_heap_size}) below target ({target_count}) - may trigger search expansion")
         else:
-            print(f"   ℹ️ No active search heap found - cleanup skipped")
+            log_info(f"   ℹ️ No active search heap found - cleanup skipped")
     except Exception as cleanup_error:
-        print(f"   ⚠️ Heap cleanup failed: {cleanup_error}")
+        log_info(f"   ⚠️ Heap cleanup failed: {cleanup_error}")
         
-    print(f"\n🤖 PHASE 3: Analyzing results and generating recommendations...")
+    log_info(f"\n🤖 PHASE 3: Analyzing results and generating recommendations...")
     
     # Generate intelligent fallback recommendation
     fallback_rec = _generate_fallback_recommendation(
         quality_stats, avg_score, quality_sufficient, target_count, min_quality_threshold
     )
     
-    print(f"\n📈 PHASE 4: FINAL EVALUATION RESULTS")
-    print(f"   Average Quality: {avg_score:.2f}")
-    print(f"   Quality Range: {min_score:.2f} - {max_score:.2f}")
-    print(f"   Above Threshold: {quality_stats['above_threshold']}/{quality_stats['total_evaluated']}")
-    print(f"   Quality Sufficient: {'✅ Yes' if quality_sufficient else '❌ No'}")
-    print(f"   Recommendation: {fallback_rec['action']}")
-    print(f"✅ Candidate evaluation workflow completed!")
+    log_info(f"\n📈 PHASE 4: FINAL EVALUATION RESULTS")
+    log_info(f"   Average Quality: {avg_score:.2f}")
+    log_info(f"   Quality Range: {min_score:.2f} - {max_score:.2f}")
+    log_info(f"   Above Threshold: {quality_stats['above_threshold']}/{quality_stats['total_evaluated']}")
+    log_info(f"   Quality Sufficient: {'✅ Yes' if quality_sufficient else '❌ No'}")
+    log_info(f"   Recommendation: {fallback_rec['action']}")
+    log_info(f"✅ Candidate evaluation workflow completed!")
     
-    return {
+    # Create result data for global state storage
+    evaluation_result_data = {
         "success": True,
         "quality_sufficient": quality_sufficient,
         "candidates_evaluated": quality_stats["total_evaluated"],
@@ -149,11 +180,25 @@ def evaluate_candidates_quality(
         
         "evaluation_timestamp": datetime.now().isoformat()
     }
+    
+    # Store results in global state
+    store_evaluation_results(evaluation_result_data)
+    
+    # Return lightweight response for agent workflow
+    return {
+        "success": True,
+        "quality_sufficient": quality_sufficient,
+        "candidates_evaluated": quality_stats["total_evaluated"],
+        "quality_candidates_count": len([c for c in evaluated_candidates if c["overall_score"] >= min_quality_threshold]),
+        "average_score": round(avg_score, 2),
+        "fallback_recommendation": fallback_rec["action"],
+        "message": f"Evaluated {quality_stats['total_evaluated']} candidates, {quality_stats['above_threshold']} above threshold {min_quality_threshold}"
+    }
 
 
 def _get_candidates_from_sources() -> List[Dict[str, Any]]:
     """Get candidates from available sources (extraction results, collector, etc.)"""
-    print(f"   📥 Searching for candidate data sources...")
+    log_info(f"   📥 Searching for candidate data sources...")
     candidates = []
     
     try:
@@ -162,7 +207,7 @@ def _get_candidates_from_sources() -> List[Dict[str, Any]]:
         extraction_summary = get_extraction_summary()
         
         if extraction_summary.get("success") and extraction_summary.get("results"):
-            print("📥 Using candidates from extraction results")
+            log_info("📥 Using candidates from extraction results")
             for result in extraction_summary["results"]:
                 if result.get("profile_data"):
                     candidates.append({
@@ -170,7 +215,7 @@ def _get_candidates_from_sources() -> List[Dict[str, Any]]:
                         "profile_data": result["profile_data"]
                     })
     except Exception as e:
-        print(f"   ⚠️ Could not get extraction results: {e}")
+        log_info(f"   ⚠️ Could not get extraction results: {e}")
     
     # Fallback to collector if no extraction results
     if not candidates:
@@ -179,10 +224,10 @@ def _get_candidates_from_sources() -> List[Dict[str, Any]]:
             collector_result = get_collected_candidates(limit=20, sort_by_score=True)
             
             if collector_result.get("candidates"):
-                print("📥 Using candidates from collector")
+                log_info("📥 Using candidates from collector")
                 candidates = collector_result["candidates"]
         except Exception as e:
-            print(f"   ⚠️ Could not get collector candidates: {e}")
+            log_info(f"   ⚠️ Could not get collector candidates: {e}")
     
     return candidates
 
@@ -205,7 +250,7 @@ def _extract_candidate_name(candidate: Dict[str, Any]) -> str:
 def _evaluate_single_candidate(candidate: Dict[str, Any], strategy: Optional[Dict[str, Any]], min_threshold: float) -> Dict[str, Any]:
     """Comprehensive evaluation of a single candidate using strategy-driven criteria"""
     
-    print(f"      🎯 Applying strategic evaluation criteria...")
+    log_info(f"      🎯 Applying strategic evaluation criteria...")
     
     # Extract profile data
     profile_data = candidate.get("profile_data", {})
@@ -229,7 +274,7 @@ def _evaluate_single_candidate(candidate: Dict[str, Any], strategy: Optional[Dic
     }
     
     # Calculate strategic bonuses (additive to base scores)
-    print(f"      🎆 Calculating strategic bonuses...")
+    log_info(f"      🎆 Calculating strategic bonuses...")
     strategic_bonuses = _calculate_strategic_bonuses({
         "name": name,
         "headline": headline,
@@ -255,7 +300,7 @@ def _evaluate_single_candidate(candidate: Dict[str, Any], strategy: Optional[Dic
     overall_score = sum(scores[key] * weights[key] for key in scores.keys())
     
     # Apply final strategic multiplier bonus (up to 15% boost)
-    print(f"      ✨ Applying final strategic multiplier...")
+    log_info(f"      ✨ Applying final strategic multiplier...")
     final_multiplier = _calculate_final_strategic_multiplier(strategic_bonuses, strategy)
     overall_score *= final_multiplier
     
@@ -480,7 +525,7 @@ def _generate_evaluation_insights(scores: Dict[str, float], threshold: float, st
 def _generate_fallback_recommendation(stats: Dict[str, Any], avg_score: float, quality_sufficient: bool, 
                                     target_count: int, threshold: float) -> Dict[str, Any]:
     """Generate intelligent fallback recommendations"""
-    print(f"   🤔 Analyzing quality distribution and generating recommendations...")
+    log_info(f"   🤔 Analyzing quality distribution and generating recommendations...")
     
     if quality_sufficient:
         return {
@@ -876,7 +921,7 @@ def _get_role_context_from_strategy(strategy: Optional[Dict[str, Any]]) -> str:
 
 def _calculate_strategic_bonuses(candidate_data: Dict[str, Any], strategy: Optional[Dict[str, Any]]) -> Dict[str, float]:
     """Calculate comprehensive strategic bonuses based on strategy alignment"""
-    print(f"        📊 Analyzing strategic alignment...")
+    log_info(f"        📊 Analyzing strategic alignment...")
     
     bonuses = {
         "company_tier_bonus": 0.0,

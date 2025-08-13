@@ -25,8 +25,8 @@ def save_recruitment_results(candidates: List[Dict[str, Any]],
     query_clean = search_params["query"].replace(" ", "_").replace("/", "_")[:30]
     
     # File paths for different types of data
-    evaluation_file = results_dir / f"linkedin_evaluation_{query_clean}_{timestamp}.json"
-    candidates_file = results_dir / f"linkedin_candidates_{query_clean}_{timestamp}.json"
+    evaluation_file = results_dir / f"linkedin_evaluation_{timestamp}.json"
+    candidates_file = results_dir / f"linkedin_candidates_{timestamp}.json"
     
     # Prepare evaluation results data
     evaluation_summary = {
@@ -57,7 +57,7 @@ def save_recruitment_results(candidates: List[Dict[str, Any]],
         json.dump(candidate_details, f, indent=2, ensure_ascii=False)
     
     # Save human-readable summary
-    txt_file = results_dir / f"linkedin_summary_{query_clean}_{timestamp}.txt"
+    txt_file = results_dir / f"linkedin_summary_{timestamp}.txt"
     
     with open(txt_file, "w", encoding="utf-8") as f:
         f.write(f"LinkedIn Recruitment Results\n")
@@ -114,9 +114,10 @@ def save_recruitment_results(candidates: List[Dict[str, Any]],
             print("📧 Outreach results saved alongside other recruitment data")
         except Exception as e:
             print(f"⚠️  Could not save outreach results: {e}")
-            outreach_file = None
+            outreach_file = e
     
     result = {
+        "outreach_file": str(outreach_file),
         "evaluation_file": str(evaluation_file),
         "candidates_file": str(candidates_file), 
         "txt_file": str(txt_file),
