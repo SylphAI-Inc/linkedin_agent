@@ -91,11 +91,11 @@ def get_url_collector() -> CandidateURLCollector:
 def smart_candidate_search(
     query: str, 
     location: str,
-    page_limit: int = 3,
+    page_limit: Optional[int] = None,
     start_page: int = 0,
-    min_score_threshold: float = 7.0,
+    min_score_threshold: Optional[float] = None,
     target_candidate_count: Optional[int] = None,
-    quality_mode: str = "adaptive",  # "adaptive", "quality_first", "fast"
+    quality_mode: Optional[str] = None,
     get_heap_backup: bool = False,  # NEW: Access backup candidates from previous search
     backup_offset: int = 0,         # NEW: Start position in heap for backup candidates  
     backup_limit: Optional[int] = None,  # NEW: Number of backup candidates to return
@@ -107,11 +107,11 @@ def smart_candidate_search(
     Args:
         query: Search query (role/title)
         location: Geographic location
-        page_limit: Number of pages to search from start_page
+        page_limit: Number of pages to search from start_page (uses config default if None)
         start_page: Page number to start searching from (0-indexed, allows continuation)
-        min_score_threshold: Minimum headline score to include candidate
+        min_score_threshold: Minimum headline score to include candidate (uses config default if None)
         target_candidate_count: Desired number of candidates (adaptive system may adjust)
-        quality_mode: "adaptive" = extend search for quality, "quality_first" = prioritize quality over quantity, "fast" = respect hard limits
+        quality_mode: "adaptive", "quality_first", "fast" (uses config default if None)
         get_heap_backup: If True, return backup candidates from existing heap instead of searching
         backup_offset: Starting position in heap for backup candidates (allows getting candidates beyond top results)
         backup_limit: Maximum number of backup candidates to return
@@ -121,6 +121,18 @@ def smart_candidate_search(
         Lightweight status dict: {success: True, candidates_found: 10}
         Actual candidate data stored in global state
     """
+    
+    # Load user configuration for defaults
+    from config_user import get_search_config
+    search_config = get_search_config()
+    
+    # Use config defaults if not provided
+    if page_limit is None:
+        page_limit = search_config.max_pages_per_search
+    if min_score_threshold is None:
+        min_score_threshold = search_config.min_search_score
+    if quality_mode is None:
+        quality_mode = search_config.quality_mode
     
     # Get strategy from global state (automatically available)
     strategy = get_strategy_for_search()

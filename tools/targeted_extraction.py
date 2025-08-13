@@ -3,7 +3,7 @@ Targeted Extraction Tool - Extract profiles from quality candidate URLs
 Since URLs are pre-filtered for quality, focus on reliable extraction and basic validation
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import time
 
 from adalflow.core.func_tool import FunctionTool
@@ -16,21 +16,31 @@ from utils.logger import log_info, log_debug, log_error, log_progress
 
 def extract_candidate_profiles(
     candidate_limit: int = None,
-    delay_between_extractions: float = 1.0,
-    validate_extraction: bool = True
+    delay_between_extractions: Optional[float] = None,
+    validate_extraction: Optional[bool] = None
 ) -> Dict[str, Any]:
     """
     Extract profiles using global state architecture
     
     Args:
         candidate_limit: Max number of candidates to extract (None = all)
-        delay_between_extractions: Delay between extractions (seconds)
-        validate_extraction: Whether to validate extracted data
+        delay_between_extractions: Delay between extractions (uses config default if None)
+        validate_extraction: Whether to validate extracted data (uses config default if None)
         
     Returns:
         Lightweight status dict: {success: True, extracted_count: 10}
         Actual extracted profiles stored in global state
     """
+    
+    # Load user configuration for defaults
+    from config_user import get_extraction_config
+    extraction_config = get_extraction_config()
+    
+    # Use config defaults if not provided
+    if delay_between_extractions is None:
+        delay_between_extractions = extraction_config.delay_between_extractions
+    if validate_extraction is None:
+        validate_extraction = extraction_config.validate_extraction_quality
     
     # Get candidates from global state (automatically populated by search)
     candidates = get_candidates_for_extraction()
