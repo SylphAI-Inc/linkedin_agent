@@ -1,0 +1,20 @@
+Senior Software Engineer - Backend Systems
+
+We are seeking a Senior Software Engineer to join our platform engineering team. You will be responsible for building scalable backend systems that handle millions of requests per day.
+
+Requirements:
+- 5+ years of software engineering experience
+- Strong expertise in Python and/or Java
+- Experience with distributed systems and microservices
+- Knowledge of cloud platforms (AWS, GCP)
+- Experience with databases (PostgreSQL, Redis)
+- Familiar with containerization (Docker, Kubernetes)
+
+Preferred Qualifications:
+- Experience at a high-growth startup or tech company
+- Background in building real-time data processing systems
+- Knowledge of message queues (Kafka, RabbitMQ)
+- Experience with infrastructure as code (Terraform)
+- Strong computer science fundamentals
+
+We offer competitive compensation, equity, and the opportunity to work on challenging technical problems with a world-class engineering team.

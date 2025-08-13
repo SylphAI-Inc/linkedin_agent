@@ -6,8 +6,10 @@ __pycache__/
 # C extensions
 *.so
 *.jsonl
+*.log
 *.json
 *.txt
+!example_job_description.txt
 
 # Distribution / packaging
 .Python
