@@ -8,7 +8,7 @@ This script helps users easily configure the agent without editing code.
 import os
 import sys
 from pathlib import Path
-from config_user import USER_CONFIG, configure_for_high_quality, configure_for_volume, configure_for_conservative
+from .config_user import USER_CONFIG, configure_for_high_quality, configure_for_volume, configure_for_conservative
 
 
 def show_current_config():
@@ -240,7 +240,23 @@ def main():
     print("🚀 LinkedIn Recruitment Agent Configuration Tool")
     
     if len(sys.argv) > 1:
-        if sys.argv[1] == "--show":
+        if sys.argv[1] in ["--help", "-h"]:
+            print("""
+Usage: linkedin-config [OPTIONS]
+
+LinkedIn Recruitment Agent Configuration Tool
+
+Options:
+  --help, -h              Show this help message
+  --show                  Show current configuration only
+  --preset-high-quality   Apply high-quality preset configuration
+  --preset-volume         Apply volume preset configuration  
+  --preset-conservative   Apply conservative preset configuration
+
+Without options: Launch interactive configuration tool
+""")
+            return
+        elif sys.argv[1] == "--show":
             show_current_config()
             return
         elif sys.argv[1] == "--preset-high-quality":

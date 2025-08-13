@@ -8,7 +8,7 @@ from .linkedin_selectors import SEARCH_INPUT, PEOPLE_TAB, SEARCH_RESULTS_CARDS
 from adalflow.core import Generator
 from adalflow.components.model_client import OpenAIClient
 from adalflow.components.output_parsers import JsonOutputParser
-from config import get_model_kwargs
+from ..config import get_model_kwargs
 
 # AdalFlow prompt for profile evaluation with strategy context
 PROFILE_EVALUATION_PROMPT = r"""<ROLE>

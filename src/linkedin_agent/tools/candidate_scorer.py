@@ -15,8 +15,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from models.linkedin_profile import LinkedInProfile, JobRequirements, CandidateScore
-from config import get_model_kwargs
+from ..models.linkedin_profile import LinkedInProfile, JobRequirements, CandidateScore
+from ..config import get_model_kwargs
 
 
 # AI-powered candidate scoring prompt using AdalFlow best practices

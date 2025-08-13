@@ -8,8 +8,8 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 from adalflow.core.func_tool import FunctionTool
 import time
-from core.workflow_state import get_profiles_for_evaluation, get_strategy_for_search, store_evaluation_results
-from utils.logger import log_info, log_debug, log_error, log_progress, log_phase_start, log_phase_end
+from ..core.workflow_state import get_profiles_for_evaluation, get_strategy_for_search, store_evaluation_results
+from ..utils.logger import log_info, log_debug, log_error, log_progress, log_phase_start, log_phase_end
 
 
 def evaluate_candidates_quality(

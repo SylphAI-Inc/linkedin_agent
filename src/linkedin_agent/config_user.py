@@ -6,7 +6,7 @@ This file contains all the key parameters users typically want to adjust.
 Edit these values to customize the agent's behavior.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 import os
 
@@ -96,10 +96,10 @@ class WorkflowConfig:
 class UserConfig:
     """Complete user configuration - edit these values!"""
     
-    search: SearchConfig = SearchConfig()
-    extraction: ExtractionConfig = ExtractionConfig()  
-    evaluation: EvaluationConfig = EvaluationConfig()
-    workflow: WorkflowConfig = WorkflowConfig()
+    search: SearchConfig = field(default_factory=SearchConfig)
+    extraction: ExtractionConfig = field(default_factory=ExtractionConfig)  
+    evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
+    workflow: WorkflowConfig = field(default_factory=WorkflowConfig)
     
     @classmethod
     def load_from_env(cls) -> 'UserConfig':

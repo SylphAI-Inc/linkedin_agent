@@ -5,8 +5,8 @@ from typing import List, Optional, Dict, Any
 from adalflow.core import Generator
 from adalflow.components.output_parsers.dataclass_parser import DataClassParser
 from adalflow.components.model_client import OpenAIClient
-from models.linkedin_profile import SearchStrategy
-from config import get_model_kwargs
+from ..models.linkedin_profile import SearchStrategy
+from ..config import get_model_kwargs
 
 
 # AdalFlow prompt template for search strategy creation

@@ -9,12 +9,12 @@ import time
 import re
 
 from adalflow.core.func_tool import FunctionTool
-from core.workflow_state import get_workflow_state, store_search_results, get_strategy_for_search
-from utils.logger import log_info, log_debug, log_error, log_progress
+from ..core.workflow_state import get_workflow_state, store_search_results, get_strategy_for_search
+from ..utils.logger import log_info, log_debug, log_error, log_progress
 from .web_nav import js as run_js, go as nav_go, wait as nav_wait
 from .linkedin_selectors import SEARCH_INPUT, PEOPLE_TAB, SEARCH_RESULTS_CARDS
 from .people_search import evaluate_headline_with_strategy
-from models.quality_system import (
+from ..models.quality_system import (
     QualityThresholds, SearchBudget, CandidateHeap, QualityAnalyzer, CandidateQuality
 )
 

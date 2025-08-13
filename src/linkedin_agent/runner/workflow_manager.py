@@ -8,11 +8,11 @@ from datetime import datetime
 from pathlib import Path
 import json
 import time
-from utils.logger import get_logger, log_info, log_debug, log_error, log_agent_step, log_phase_start, log_phase_end, log_progress
+from ..utils.logger import get_logger, log_info, log_debug, log_error, log_agent_step, log_phase_start, log_phase_end, log_progress
 
-from agents.linkedin_agent import LinkedInAgent
-from utils.role_prompts import RolePromptBuilder
-from config import AgentConfig
+from ..agents.linkedin_agent import LinkedInAgent
+from ..utils.role_prompts import RolePromptBuilder
+from ..config import AgentConfig
 from adalflow.core.func_tool import FunctionTool
 
 class LinkedInWorkflowManager:

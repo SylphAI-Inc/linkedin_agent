@@ -8,9 +8,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from vendor.claude_web.browser import start as start_browser  # noqa: E402
-from vendor.claude_web.tools.web_tool import WebTool  # noqa: E402
-from config import CDPConfig  # noqa: E402
+from ..vendor.claude_web.browser import start as start_browser  # noqa: E402
+from ..vendor.claude_web.tools.web_tool import WebTool  # noqa: E402
+from ..config import CDPConfig  # noqa: E402
 
 
 def main():

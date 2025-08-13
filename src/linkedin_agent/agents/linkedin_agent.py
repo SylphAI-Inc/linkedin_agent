@@ -1,22 +1,22 @@
 from typing import Any, Dict, List, Optional
-from utils.logger import log_info, log_debug, log_error, log_progress
+from ..utils.logger import log_info, log_debug, log_error, log_progress
 
 from adalflow.components.agent.agent import Agent
 from adalflow.components.agent.runner import Runner
 from adalflow.components.model_client.openai_client import OpenAIClient
 from adalflow.core.func_tool import FunctionTool
 
-from config import AgentConfig, get_model_kwargs
-from tools.web_nav import GoTool, ClickTool, TypeTool, KeyTool, JsTool, WaitTool
-from tools.linkedin_auth import CheckAuthTool, NavigateLinkedInTool, PromptLoginTool
-from tools.smart_search import SmartCandidateSearchTool, GetCollectedCandidatesTool
-from tools.targeted_extraction import ExtractCandidateProfilesTool
-from tools.candidate_evaluation import CandidateEvaluationTool
-from tools.candidate_outreach import (
+from ..config import AgentConfig, get_model_kwargs
+from ..tools.web_nav import GoTool, ClickTool, TypeTool, KeyTool, JsTool, WaitTool
+from ..tools.linkedin_auth import CheckAuthTool, NavigateLinkedInTool, PromptLoginTool
+from ..tools.smart_search import SmartCandidateSearchTool, GetCollectedCandidatesTool
+from ..tools.targeted_extraction import ExtractCandidateProfilesTool
+from ..tools.candidate_evaluation import CandidateEvaluationTool
+from ..tools.candidate_outreach import (
     CandidateOutreachGenerationTool,  # New agent tool for outreach generation
     SaveOutreachResultsTool  # Used by workflow manager to save outreach results
 )
-from tools.strategy_creation import CreateSearchStrategyTool
+from ..tools.strategy_creation import CreateSearchStrategyTool
 
 
 class LinkedInAgent:

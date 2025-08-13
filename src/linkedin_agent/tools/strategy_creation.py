@@ -4,9 +4,9 @@ Strategy Creation Tool - Generate recruitment strategies as part of agentic work
 
 from typing import Dict, Any, Optional
 from adalflow.core.func_tool import FunctionTool
-from tools.strategy_generator import StrategyGenerator
-from core.workflow_state import store_strategy
-from utils.logger import log_info, log_debug, log_error, log_progress
+from .strategy_generator import StrategyGenerator
+from ..core.workflow_state import store_strategy
+from ..utils.logger import log_info, log_debug, log_error, log_progress
 
 
 def create_search_strategy(

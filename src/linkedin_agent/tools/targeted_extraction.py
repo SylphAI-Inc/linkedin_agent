@@ -10,8 +10,8 @@ from adalflow.core.func_tool import FunctionTool
 from .web_nav import go as nav_go, wait as nav_wait
 from .profile_extractor import extract_profile  # Use existing extraction function
 from .smart_search import get_url_collector
-from core.workflow_state import get_candidates_for_extraction, store_extraction_results
-from utils.logger import log_info, log_debug, log_error, log_progress
+from ..core.workflow_state import get_candidates_for_extraction, store_extraction_results
+from ..utils.logger import log_info, log_debug, log_error, log_progress
 
 
 def extract_candidate_profiles(

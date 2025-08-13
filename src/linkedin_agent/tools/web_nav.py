@@ -1,6 +1,6 @@
 from adalflow.core.func_tool import FunctionTool
-from vendor.claude_web.tools.web_tool import WebTool
-from config import CDPConfig
+from ..vendor.claude_web.tools.web_tool import WebTool
+from ..config import CDPConfig
 
 _web = None
 

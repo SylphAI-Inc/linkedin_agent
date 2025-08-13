@@ -12,10 +12,10 @@ from adalflow.core.func_tool import FunctionTool
 from adalflow.core import Generator
 from adalflow.components.output_parsers.dataclass_parser import DataClassParser
 from adalflow.components.model_client import OpenAIClient
-from config import get_model_kwargs
-from models.linkedin_profile import CandidateOutreachEvaluation
-from core.workflow_state import get_candidates_for_outreach, store_outreach_results
-from utils.logger import log_info, log_debug, log_error, log_progress
+from ..config import get_model_kwargs
+from ..models.linkedin_profile import CandidateOutreachEvaluation
+from ..core.workflow_state import get_candidates_for_outreach, store_outreach_results
+from ..utils.logger import log_info, log_debug, log_error, log_progress
 
 
 def generate_candidate_outreach(

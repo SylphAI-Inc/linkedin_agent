@@ -8,17 +8,17 @@ import os
 import sys
 import time
 from pathlib import Path
-from utils.logger import init_logging, get_logger, log_info, log_error, log_debug, log_phase_start, log_phase_end
+from .utils.logger import init_logging, get_logger, log_info, log_error, log_debug, log_phase_start, log_phase_end
 
 # Ensure repo root is on sys.path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from config import load_env, CDPConfig
-from vendor.claude_web.browser import start as start_browser
-from utils.streaming_handler import AgentProgressTracker
-from runner.workflow_manager import LinkedInWorkflowManager
+from .config import load_env, CDPConfig
+from .vendor.claude_web.browser import start as start_browser
+from .utils.streaming_handler import AgentProgressTracker
+from .runner.workflow_manager import LinkedInWorkflowManager
 import requests
 
 
