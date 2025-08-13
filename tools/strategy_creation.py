@@ -5,6 +5,8 @@ Strategy Creation Tool - Generate recruitment strategies as part of agentic work
 from typing import Dict, Any, Optional
 from adalflow.core.func_tool import FunctionTool
 from tools.strategy_generator import StrategyGenerator
+from core.workflow_state import store_strategy
+from utils.logger import log_info, log_debug, log_error, log_progress
 
 
 def create_search_strategy(
@@ -24,9 +26,9 @@ def create_search_strategy(
         Comprehensive strategy dict with evaluation criteria and search guidance
     """
     
-    print(f"🎯 Creating search strategy for: '{query}' in {location}")
+    log_info(f"🎯 Creating search strategy for: '{query}' in {location}", phase="STRATEGY")
     if job_description:
-        print(f"📋 Using job description text for enhanced strategy ({len(job_description)} chars)")
+        log_info(f"📋 Using job description text for enhanced strategy ({len(job_description)} chars)", phase="STRATEGY")
     
     try:
         generator = StrategyGenerator()
@@ -45,21 +47,28 @@ def create_search_strategy(
         strategy['target_location'] = location
         strategy['tool_generated'] = True
         
-        print(f"✅ Strategy created with {len(strategy)} components")
-        print(f"📊 Key focus areas: {', '.join(strategy.get('evaluation_criteria', {}).get('technology_priorities', {}).get('must_have', [])[:3])}")
+        log_info(f"✅ Strategy created with {len(strategy)} components", phase="STRATEGY")
+        log_info(f"📊 Key focus areas: {', '.join(strategy.get('evaluation_criteria', {}).get('technology_priorities', {}).get('must_have', [])[:3])}", phase="STRATEGY")
         
+        # Store strategy in global state
+        log_progress("Storing strategy in global state", "STRATEGY")
+        global_state_result = store_strategy(strategy)
+        log_debug(f"💾 {global_state_result.get('message', 'Strategy stored in global state')}", phase="STRATEGY")
+        
+        # Return lightweight status for agent
         return {
             "success": True,
-            "strategy": strategy,
+            "strategy_id": global_state_result.get('strategy_id', 'workflow_generated'),
             "query": query,
             "location": location,
-            "message": f"Strategy successfully created for {query} in {location}"
+            "message": f"Strategy for {query} in {location} stored in global state"
         }
         
     except Exception as e:
-        print(f"⚠️ Strategy creation failed: {e}")
+        log_error(f"⚠️ Strategy creation failed: {e}", phase="STRATEGY", exception=e)
         
         # Fallback strategy
+        log_progress("Creating fallback strategy", "STRATEGY")
         generator = StrategyGenerator()
         fallback_strategy = generator.create_fallback_strategy(query, location)
         fallback_strategy['original_query'] = query
@@ -67,14 +76,19 @@ def create_search_strategy(
         fallback_strategy['tool_generated'] = True
         fallback_strategy['fallback_used'] = True
         
-        print(f"✅ Using fallback strategy")
+        log_info(f"✅ Using fallback strategy", phase="STRATEGY")
+        
+        # Store fallback strategy in global state
+        log_progress("Storing fallback strategy in global state", "STRATEGY")
+        global_state_result = store_strategy(fallback_strategy)
+        log_debug(f"💾 {global_state_result.get('message', 'Fallback strategy stored in global state')}", phase="STRATEGY")
         
         return {
             "success": True,
-            "strategy": fallback_strategy,
+            "strategy_id": global_state_result.get('strategy_id', 'fallback_strategy'),
             "query": query,
             "location": location,
-            "message": f"Fallback strategy created for {query} in {location}",
+            "message": f"Fallback strategy for {query} in {location} stored in global state",
             "warning": f"Primary strategy failed: {str(e)}"
         }
 

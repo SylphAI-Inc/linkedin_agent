@@ -9,6 +9,8 @@ import time
 import re
 
 from adalflow.core.func_tool import FunctionTool
+from core.workflow_state import get_workflow_state, store_search_results, get_strategy_for_search
+from utils.logger import log_info, log_debug, log_error, log_progress
 from .web_nav import js as run_js, go as nav_go, wait as nav_wait
 from .linkedin_selectors import SEARCH_INPUT, PEOPLE_TAB, SEARCH_RESULTS_CARDS
 from .people_search import evaluate_headline_with_strategy
@@ -88,8 +90,7 @@ def get_url_collector() -> CandidateURLCollector:
 
 def smart_candidate_search(
     query: str, 
-    location: str, 
-    strategy: Dict[str, Any],
+    location: str,
     page_limit: int = 3,
     start_page: int = 0,
     min_score_threshold: float = 7.0,
@@ -97,15 +98,15 @@ def smart_candidate_search(
     quality_mode: str = "adaptive",  # "adaptive", "quality_first", "fast"
     get_heap_backup: bool = False,  # NEW: Access backup candidates from previous search
     backup_offset: int = 0,         # NEW: Start position in heap for backup candidates  
-    backup_limit: Optional[int] = None  # NEW: Number of backup candidates to return
+    backup_limit: Optional[int] = None,  # NEW: Number of backup candidates to return
+    expand_scope: bool = False      # NEW: Expand search scope
 ) -> Dict[str, Any]:
     """
-    Smart search for quality candidates using intelligent quality-driven system
+    Smart search for quality candidates using global state architecture
     
     Args:
         query: Search query (role/title)
-        location: Geographic location  
-        strategy: AI-generated search strategy
+        location: Geographic location
         page_limit: Number of pages to search from start_page
         start_page: Page number to start searching from (0-indexed, allows continuation)
         min_score_threshold: Minimum headline score to include candidate
@@ -114,14 +115,27 @@ def smart_candidate_search(
         get_heap_backup: If True, return backup candidates from existing heap instead of searching
         backup_offset: Starting position in heap for backup candidates (allows getting candidates beyond top results)
         backup_limit: Maximum number of backup candidates to return
+        expand_scope: If True, expand search scope for more candidates
         
     Returns:
-        Dict with top quality candidates, quality metrics, and search decisions
+        Lightweight status dict: {success: True, candidates_found: 10}
+        Actual candidate data stored in global state
     """
+    
+    # Get strategy from global state (automatically available)
+    strategy = get_strategy_for_search()
+    if not strategy:
+        return {
+            "success": False,
+            "error": "No strategy found in global state. Run create_search_strategy first.",
+            "candidates_found": 0
+        }
+    
+    log_info(f"🔄 Strategy retrieved from global state: {strategy.get('original_query', 'Unknown query')}", phase="SEARCH")
     
     # NEW: Handle heap backup mode - return candidates from existing collector
     if get_heap_backup:
-        print(f"🔄 Accessing heap backup candidates (offset: {backup_offset}, limit: {backup_limit})")
+        log_progress(f" Accessing heap backup candidates (offset: {backup_offset}, limit: {backup_limit})", step="processing")
         
         collector = get_url_collector()
         all_candidates = collector.get_candidates(sort_by_score=True)
@@ -140,7 +154,7 @@ def smart_candidate_search(
         if backup_limit:
             backup_candidates = backup_candidates[:backup_limit]
         
-        print(f"📊 Heap backup: {len(backup_candidates)}/{len(all_candidates)} candidates (offset: {backup_offset})")
+        log_info(f" Heap backup: {len(backup_candidates)}/{len(all_candidates)} candidates (offset: {backup_offset})", phase="analysis")
         
         return {
             "success": True,
@@ -182,16 +196,15 @@ def smart_candidate_search(
     global _current_search_heap
     _current_search_heap = candidate_heap
     
-    print(f"🔍 Quality-driven search: '{query}' in {location}")
-    print(f"📊 Quality mode: {quality_mode}")
-    print(f"🎯 Target candidates: {target_candidate_count or 'adaptive'}")
-    print(f"🗂️  Heap size: {effective_heap_size} (buffer: {heap_buffer_multiplier}x for flexibility)")
-    print(f"📊 Quality thresholds: min={thresholds.minimum_acceptable}, target={thresholds.target_quality}")
-    print(f"📄 Page budget: {budget.initial_page_limit} → {budget.max_page_limit} (adaptive)")
+    log_info(f"🔍 Quality-driven search: '{query}' in {location}", phase="SEARCH")
+    log_info(f"📊 Quality mode: {quality_mode}, Target: {target_candidate_count or 'adaptive'}", phase="SEARCH")
+    log_debug(f"🗂️  Heap size: {effective_heap_size} (buffer: {heap_buffer_multiplier}x for flexibility)", phase="SEARCH")
+    log_debug(f"📊 Quality thresholds: min={thresholds.minimum_acceptable}, target={thresholds.target_quality}", phase="SEARCH")
+    log_debug(f"📄 Page budget: {budget.initial_page_limit} → {budget.max_page_limit} (adaptive)", phase="SEARCH")
     
     # Build search query - keep it simple for reliability
     search_query = f"{query} {location}".strip() if location else query
-    print(f"🔍 Search query: '{search_query}'")
+    log_debug(f" Search query: '{search_query}'", phase="search")
     
     pages_searched = 0
     candidates_evaluated = 0
@@ -203,12 +216,12 @@ def smart_candidate_search(
         page = start_page  # Start from specified page
         
         if start_page > 0:
-            print(f"🔄 Continuing search from page {start_page + 1} (searched {start_page} pages previously)")
+            log_progress(f" Continuing search from page {start_page + 1} (searched {start_page} pages previously)", step="processing")
             search_decisions.append(f"continued_from_page_{start_page + 1}")
         
         # Internal threshold-based loop - tool decides when to stop
         while page < budget.max_page_limit:
-            print(f"📖 Searching page {page + 1} (max: {budget.max_page_limit})")
+            log_info(f"📖 Searching page {page + 1} (max: {budget.max_page_limit})")
 
             # Navigate to search page with proper pagination
             if page == 0:
@@ -217,28 +230,35 @@ def smart_candidate_search(
                 # LinkedIn uses &page= parameter for pagination, not &start=
                 search_url = f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(search_query)}&page={page + 1}"
             
-            print(f"🌐 Navigating to: {search_url}")
+            log_info(f"🌐 Navigating to: {search_url}")
             nav_go(search_url)
             nav_wait(3)  # Wait for page load
             
             # Check if we have search results on the page
-            print(f"   🔍 Checking for search results...")
+            log_debug(f"🔍 Checking for search results...", phase="debug")
             
             # Extract raw candidate data and do integrated quality assessment
             raw_candidates = _extract_raw_candidate_data_from_page()
-            print(f"   📊 Extracted {len(raw_candidates)} raw candidates from page")
+            log_info(f"📊 Extracted {len(raw_candidates)} raw candidates from page {page}", phase="SEARCH")
             
             if not raw_candidates:
-                print(f"❌ No results found on page {page}, stopping search")
+                log_error(f" No results found on page {page}, stopping search", phase="error")
                 search_decisions.append(f"stopped_no_results_page_{page}")
                 break
+            
+            # Log candidate names found on this page
+            log_info(f"🔍 Candidates found on page {page}:", phase="SEARCH")
+            for i, candidate in enumerate(raw_candidates, 1):
+                name = candidate.get("name", "Unknown")
+                headline = candidate.get("headline", "No headline")[:60] + "..." if len(candidate.get("headline", "")) > 60 else candidate.get("headline", "")
+                log_info(f"   {i}. {name} - {headline}", phase="SEARCH")
             
             pages_searched += 1
             page_candidates_added = 0
             page_quality_scores = []
             
             # Single-step processing: extract + assess quality + add to heap
-            print(f"   🔍 Processing {len(raw_candidates)} candidates with quality assessment...")
+            log_info(f"🔍 Processing {len(raw_candidates)} candidates with quality assessment...", phase="SEARCH")
             for i, raw_candidate in enumerate(raw_candidates, 1):
                 candidates_evaluated += 1
                 
@@ -248,28 +268,30 @@ def smart_candidate_search(
                 # Add to heap if quality is sufficient
                 added, reason = candidate_heap.add_candidate(raw_candidate, quality)
                 
-                print(f"      Candidate {i}: {raw_candidate.get('name', 'Unknown')} - Score: {quality.overall_score:.2f} - {'✅' if added else '❌'}")
+                name = raw_candidate.get('name', 'Unknown')
+                score = quality.overall_score
+                status = '✅ Added' if added else '❌ Filtered'
                 
                 if added:
+                    log_info(f"   ✅ {name} (Score: {score:.2f}) - Added to candidate pool", phase="SEARCH")
                     page_candidates_added += 1
                     page_quality_scores.append(quality.overall_score)
                     quality_scores_history.append(quality.overall_score)
-                
-                if reason == "replaced_worse_candidate":
-                    print(f"         ↗️ Replaced lower quality candidate")
-                elif reason == "duplicate":
-                    print(f"         🔄 Duplicate candidate")
-                elif reason == "quality_too_low":
-                    print(f"         📉 Quality too low for heap")
-                elif reason == "below_minimum_threshold":
-                    print(f"         🚫 Below minimum threshold ({min_score_threshold})")
+                else:
+                    # Log rejection reason for transparency
+                    rejection_reason = {
+                        "replaced_worse_candidate": "Replaced by better candidate",
+                        "duplicate": "Duplicate entry", 
+                        "quality_too_low": "Quality below heap standard",
+                        "below_minimum_threshold": f"Below minimum threshold ({min_score_threshold})"
+                    }.get(reason, f"Not added ({reason})")
+                    log_info(f"   ❌ {name} (Score: {score:.2f}) - {rejection_reason}", phase="SEARCH")
             
-            print(f"   ✅ {page_candidates_added} candidates passed quality threshold")
-            print(f"   📊 Extracted {page_candidates_added} candidates from page")
+            log_info(f"✅ Page {page} processed: {page_candidates_added}/{len(raw_candidates)} candidates added to pool", phase="SEARCH")
             
             # Get current quality statistics
             current_stats = candidate_heap.get_quality_stats()
-            print(f"   📈 Current heap: {current_stats['count']} candidates, avg quality: {current_stats.get('average', 0):.1f}")
+            log_debug(f"📈 Current heap: {current_stats['count']} candidates, avg quality: {current_stats.get('average', 0):.1f}", phase="debug")
             time.sleep(3)
             
             
@@ -287,7 +309,7 @@ def smart_candidate_search(
                 # Simple decision: continue if ANY threshold not met
                 if not should_extend_quality and not needs_more_capacity and has_enough_candidates:
                     search_decisions.append(f"thresholds_met_quality_{current_stats.get('average', 0):.1f}_capacity_{capacity_utilization:.1f}%_count_{len(candidate_heap.heap)}")
-                    print(f"   ✅ All thresholds met: quality={current_stats.get('average', 0):.1f}, capacity={capacity_utilization:.1f}%, count={len(candidate_heap.heap)}")
+                    log_debug(f"✅ All thresholds met: quality={current_stats.get('average', 0):.1f}, capacity={capacity_utilization:.1f}%, count={len(candidate_heap.heap)}", phase="debug")
                     break
                 else:
                     # Log why continuing (for debugging)
@@ -299,16 +321,16 @@ def smart_candidate_search(
                     if not has_enough_candidates:
                         reasons.append(f"need_{target_candidate_count or 3}_have_{len(candidate_heap.heap)}")
                     
-                    print(f"   🔄 Continuing search: {', '.join(reasons)}")
+                    log_debug(f"🔄 Continuing search: {', '.join(reasons)}", phase="debug")
                     search_decisions.append(f"continuing_{'+'.join(reasons)}")
             else:
-                print(f"   📖 Searching initial pages ({page + 1}/{budget.initial_page_limit})")
+                log_debug(f"📖 Searching initial pages ({page + 1}/{budget.initial_page_limit})", phase="debug")
                     
             # Check for quality plateau
             if len(quality_scores_history) >= thresholds.plateau_window:
                 if quality_analyzer.detect_quality_plateau(quality_scores_history):
                     search_decisions.append("quality_plateau_detected")
-                    print(f"   🏔️ Quality plateau detected - stopping search")
+                    log_debug(f"🏔️ Quality plateau detected - stopping search", phase="debug")
                     break
             
             # Small delay between pages
@@ -318,7 +340,7 @@ def smart_candidate_search(
             pages_searched = page - start_page  # Pages searched in this call
     
     except Exception as e:
-        print(f"❌ Search error: {e}")
+        log_error(f" Search error: {e}", phase="error")
         return {
             "success": False,
             "error": str(e),
@@ -348,11 +370,11 @@ def smart_candidate_search(
     final_stats = candidate_heap.get_quality_stats()
     final_candidates = candidate_heap.get_top_candidates(limit=target_candidate_count)
     
-    print(f"\n🎯 Search complete:")
-    print(f"   📊 Quality: avg={final_stats.get('average', 0):.1f}, count={final_stats['count']}")
-    print(f"   📚 Heap capacity: {candidate_heap.get_capacity_utilization():.1f}%")
-    print(f"   📄 Pages searched: {pages_searched}/{budget.max_page_limit}")
-    print(f"   ✅ Returning {len(final_candidates)} top candidates for extraction")
+    log_info(f"\n🎯 Search complete:")
+    log_debug(f"📊 Quality: avg={final_stats.get('average', 0):.1f}, count={final_stats['count']}", phase="debug")
+    log_debug(f"📚 Heap capacity: {candidate_heap.get_capacity_utilization():.1f}%", phase="debug")
+    log_debug(f"📄 Pages searched: {pages_searched}/{budget.max_page_limit}", phase="debug")
+    log_debug(f"✅ Returning {len(final_candidates)} top candidates for extraction", phase="debug")
     
     # Add candidates to collector with full quality assessment data
     collector = get_url_collector()
@@ -365,34 +387,26 @@ def smart_candidate_search(
             'quality_assessment': candidate['quality_assessment']  # Preserve full quality data
         })
     
-    print(f"\n🎯 Quality-driven search completed!")
-    print(f"   📊 Evaluated {candidates_evaluated} candidates across {pages_searched} pages")
-    print(f"   ✅ Found {final_stats['count']} quality candidates")
-    print(f"   📈 Quality range: {final_stats.get('min', 0):.1f} → {final_stats.get('max', 0):.1f} (avg: {final_stats.get('average', 0):.1f})")
-    print(f"   📤 Returning {len(final_candidates)} candidates (heap holds {final_stats['count']} for flexibility)")
-    print(f"   🧠 Search decisions: {', '.join(search_decisions)}")
+    log_info(f"\n🎯 Quality-driven search completed!")
+    log_debug(f"📊 Evaluated {candidates_evaluated} candidates across {pages_searched} pages", phase="debug")
+    log_debug(f"✅ Found {final_stats['count']} quality candidates", phase="debug")
+    log_debug(f"📈 Quality range: {final_stats.get('min', 0):.1f} → {final_stats.get('max', 0):.1f} (avg: {final_stats.get('average', 0):.1f})", phase="debug")
+    log_debug(f"📤 Storing {len(final_candidates)} candidates in global state", phase="debug")
+    log_debug(f"🧠 Search decisions: {', '.join(search_decisions)}", phase="debug")
     
+    # Store search results in global state
+    global_state_result = store_search_results(final_candidates)
+    log_debug(f"💾 {global_state_result.get('message', 'Stored in global state')}", phase="debug")
+    
+    # Return lightweight status for agent
     return {
         "success": True,
-        "candidates": final_candidates,  # Main result for agent
         "candidates_found": len(final_candidates),
         "pages_searched": pages_searched,
-        
-        # CRITICAL: Page continuation info for expand_search_scope fallback
-        "next_start_page": page,  # Where to continue searching from
+        "quality_average": final_stats.get('average', 0),
         "search_exhausted": page >= budget.max_page_limit,
-        
-        # Quality summary (simplified for agent)
-        "quality_stats": {
-            "count": final_stats['count'], 
-            "average": final_stats.get('average', 0),
-            "heap_capacity_pct": candidate_heap.get_capacity_utilization()
-        },
-        
-        # Internal data for debugging/monitoring
-        "search_decisions": search_decisions,
-        "total_heap_candidates": final_stats['count'],  # More in heap than returned
-        "search_query": search_query
+        "heap_capacity_pct": candidate_heap.get_capacity_utilization(),
+        "message": f"Found {len(final_candidates)} candidates, stored in global state"
     }
 
 
@@ -473,11 +487,11 @@ def _extract_raw_candidate_data_from_page() -> List[Dict[str, Any]]:
     """
     
     try:
-        print(f"   🛠️  Running JavaScript extraction...")
+        log_debug(f"🛠️  Running JavaScript extraction...", phase="debug")
         results = run_js(extraction_code)
         
         if results is None or not isinstance(results, list):
-            print(f"   ⚠️  JavaScript returned invalid data: {results}")
+            log_debug(f"⚠️  JavaScript returned invalid data: {results}", phase="debug")
             return []
         
         # Return raw candidate data - no scoring here
@@ -492,7 +506,7 @@ def _extract_raw_candidate_data_from_page() -> List[Dict[str, Any]]:
         ]
         
     except Exception as e:
-        print(f"   ❌ Extraction error: {e}")
+        log_debug(f"❌ Extraction error: {e}", phase="debug")
         return []
 
 
@@ -520,7 +534,7 @@ def get_collected_candidates(limit: int = None, sort_by_score: bool = True) -> D
     if limit:
         candidates = candidates[:limit]
         if sort_by_score and candidates:
-            print(f"🎯 Selected top {len(candidates)} candidates (scores: {candidates[0].get('headline_score', 0):.1f} to {candidates[-1].get('headline_score', 0):.1f})")
+            log_info(f" Selected top {len(candidates)} candidates (scores: {candidates[0].get('headline_score', 0):.1f} to {candidates[-1].get('headline_score', 0):.1f})", phase="evaluation")
     
     return {
         "total_count": collector.get_candidate_count(),

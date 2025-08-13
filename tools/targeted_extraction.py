@@ -10,6 +10,8 @@ from adalflow.core.func_tool import FunctionTool
 from .web_nav import go as nav_go, wait as nav_wait
 from .profile_extractor import extract_profile  # Use existing extraction function
 from .smart_search import get_url_collector
+from core.workflow_state import get_candidates_for_extraction, store_extraction_results
+from utils.logger import log_info, log_debug, log_error, log_progress
 
 
 def extract_candidate_profiles(
@@ -18,7 +20,7 @@ def extract_candidate_profiles(
     validate_extraction: bool = True
 ) -> Dict[str, Any]:
     """
-    Extract profiles from collected quality candidate URLs
+    Extract profiles using global state architecture
     
     Args:
         candidate_limit: Max number of candidates to extract (None = all)
@@ -26,30 +28,32 @@ def extract_candidate_profiles(
         validate_extraction: Whether to validate extracted data
         
     Returns:
-        Dict with extracted profiles and extraction statistics
+        Lightweight status dict: {success: True, extracted_count: 10}
+        Actual extracted profiles stored in global state
     """
     
-    collector = get_url_collector()
-    candidates = collector.get_candidates(sort_by_score=True)  # Get candidates sorted by score
+    # Get candidates from global state (automatically populated by search)
+    candidates = get_candidates_for_extraction()
     
     if not candidates:
         return {
             "success": False,
-            "error": "No candidates available for extraction",
+            "error": "No candidates found in global state. Run smart_candidate_search first.",
             "extracted_count": 0,
-            "failed_count": 0,
-            "results": []
+            "failed_count": 0
         }
+    
+    log_info(f"🔄 Retrieved {len(candidates)} candidates from global state for extraction", phase="EXTRACTION")
     
     # Limit candidates if specified - now getting the TOP candidates by score
     if candidate_limit:
         candidates = candidates[:candidate_limit]
-        print(f"🎯 Selected top {len(candidates)} candidates by headline score")
+        log_info(f"🎯 Selected top {len(candidates)} candidates by headline score", phase="EXTRACTION")
         if candidates:
-            print(f"📊 Score range: {candidates[0].get('headline_score', 0):.1f} (highest) to {candidates[-1].get('headline_score', 0):.1f} (lowest)")
+            log_debug(f"📊 Score range: {candidates[0].get('headline_score', 0):.1f} (highest) to {candidates[-1].get('headline_score', 0):.1f} (lowest)", phase="EXTRACTION")
     
-    print(f"🎯 Starting targeted extraction for {len(candidates)} candidates")
-    print(f"⏱️  Delay between extractions: {delay_between_extractions}s")
+    log_info(f"🎯 Starting targeted extraction for {len(candidates)} candidates", phase="EXTRACTION")
+    log_debug(f"⏱️  Delay between extractions: {delay_between_extractions}s", phase="EXTRACTION")
     
     extracted_profiles = []
     failed_extractions = []
@@ -66,7 +70,7 @@ def extract_candidate_profiles(
         name = candidate.get('name', 'Unknown')
         
         if not url:
-            print(f"❌ {i}/{len(candidates)}: No URL for {name}")
+            log_error(f"❌ {i}/{len(candidates)}: No URL for {name}", phase="EXTRACTION")
             failed_extractions.append({
                 "candidate": candidate,
                 "error": "Missing URL"
@@ -77,8 +81,8 @@ def extract_candidate_profiles(
         extraction_stats["attempted"] += 1
         
         try:
-            print(f"📥 {i}/{len(candidates)}: Extracting {name}")
-            print(f"   URL: {url}")
+            log_progress(f"Extracting {name} ({i}/{len(candidates)})", "EXTRACTION")
+            log_debug(f"   URL: {url}", phase="EXTRACTION")
             
             # Navigate to profile
             nav_go(url)
@@ -138,14 +142,22 @@ def extract_candidate_profiles(
         print(f"   Validation passed: {extraction_stats['validation_passed']}")
         print(f"   Validation issues: {extraction_stats['validation_failed']}")
     
+    # Store extraction results in global state
+    extraction_data = {
+        "results": extracted_profiles,
+        "statistics": extraction_stats,
+        "failed_extractions": failed_extractions
+    }
+    global_state_result = store_extraction_results(extraction_data)
+    print(f"💾 {global_state_result.get('message', 'Extraction results stored in global state')}")
+    
+    # Return lightweight status for agent
     return {
         "success": True,
         "extracted_count": extraction_stats["successful"],
         "failed_count": extraction_stats["failed"],
         "success_rate": success_rate,
-        "statistics": extraction_stats,
-        "results": extracted_profiles,
-        "failed_extractions": failed_extractions
+        "message": f"Extracted {extraction_stats['successful']} profiles, stored in global state"
     }
 
 

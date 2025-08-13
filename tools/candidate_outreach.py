@@ -14,42 +14,48 @@ from adalflow.components.output_parsers.dataclass_parser import DataClassParser
 from adalflow.components.model_client import OpenAIClient
 from config import get_model_kwargs
 from models.linkedin_profile import CandidateOutreachEvaluation
+from core.workflow_state import get_candidates_for_outreach, store_outreach_results
+from utils.logger import log_info, log_debug, log_error, log_progress
 
 
 def generate_candidate_outreach(
-    candidates: Optional[List[Dict[str, Any]]] = None,
     position_title: str = "Software Engineer",
     location: str = "San Francisco",
-    required_technologies: Optional[List[str]] = None,
-    strategy: Optional[Dict[str, Any]] = None,
+    required_technologies: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
-    Generate personalized outreach messages for evaluated candidates
+    Generate personalized outreach messages using global state architecture
     
     Args:
-        candidates: List of evaluated candidates (if None, gets from evaluation results)
         position_title: Job position title for context
         location: Job location for context
         required_technologies: List of required technologies
-        strategy: AI-generated strategy for context
         
     Returns:
-        Dict with outreach messages and recommendations
+        Lightweight status dict: {success: True, outreach_generated: 8, recommended_count: 6}
+        Actual outreach results stored in global state
     """
     
-    print(f"📧 Starting candidate outreach generation...")
-    print(f"   Position: {position_title} in {location}")
+    log_info(f"📧 Starting candidate outreach generation...", phase="OUTREACH")
+    log_info(f"   Position: {position_title} in {location}", phase="OUTREACH")
     
-    # Candidates must be provided in agentic workflow
+    # Get quality candidates from global state
+    candidates = get_candidates_for_outreach()
+    
     if not candidates:
         return {
             "success": False,
-            "error": "No evaluated candidates provided for outreach generation",
-            "outreach_generated": 0,
-            "messages": []
+            "error": "No quality candidates found in global state. Run evaluate_candidates_quality first.",
+            "outreach_generated": 0
         }
     
-    print(f"📊 Generating outreach for {len(candidates)} candidates...")
+    log_info(f"🔄 Retrieved {len(candidates)} quality candidates from global state", phase="OUTREACH")
+    
+    # Get strategy from global state
+    from core.workflow_state import get_strategy_for_search
+    strategy = get_strategy_for_search()
+    
+    log_info(f"📊 Generating outreach for {len(candidates)} candidates...", phase="OUTREACH")
     
     # Prepare position context
     position_context = _build_position_context(position_title, location, required_technologies, strategy)
@@ -59,7 +65,7 @@ def generate_candidate_outreach(
     successful_outreach = 0
     
     for i, candidate in enumerate(candidates, 1):
-        print(f"   📧 Generating outreach {i}: {candidate.get('name', 'Unknown')}")
+        log_progress(f"Generating outreach for {candidate.get('name', 'Unknown')} ({i}/{len(candidates)})", "OUTREACH")
         
         try:
             # Generate message directly without evaluation (candidates are pre-qualified)
@@ -82,13 +88,26 @@ def generate_candidate_outreach(
     print(f"   Recommended for outreach: {successful_outreach}")
     print(f"   Success rate: {(successful_outreach/len(candidates)*100):.1f}%")
     
-    return {
+    # Store outreach results in global state
+    outreach_data = {
         "success": True,
         "outreach_generated": len(outreach_results),
         "recommended_count": successful_outreach,
         "messages": outreach_results,
         "position_context": position_context,
         "generation_timestamp": datetime.now().isoformat()
+    }
+    
+    global_state_result = store_outreach_results(outreach_data)
+    print(f"💾 {global_state_result.get('message', 'Outreach results stored in global state')}")
+    
+    # Return lightweight status for agent
+    return {
+        "success": True,
+        "outreach_generated": len(outreach_results),
+        "recommended_count": successful_outreach,
+        "success_rate": (successful_outreach/len(candidates)*100) if len(candidates) > 0 else 0,
+        "message": f"Generated {len(outreach_results)} outreach messages, stored in global state"
     }
 
 
@@ -981,7 +1000,6 @@ def save_outreach_results(
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(outreach_data, f, indent=2, ensure_ascii=False)
         
-        print(f"💾 Outreach results saved to: {output_file}")
         return output_file
         
     except Exception as e:
