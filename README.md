@@ -119,17 +119,20 @@ python main.py --query "Data Scientist" --location "New York" --limit 3
 
 ### **Advanced Usage**
 ```bash
-# Test global state workflow
+# Configure for high-quality candidates (fewer but better)
+python configure.py --preset-high-quality
+python main.py --job-description job_desc.txt --limit 3
+
+# Configure for volume (more candidates)  
+python configure.py --preset-volume
+python main.py --query "Software Engineer" --limit 15
+
+# Custom configuration
+python configure.py  # Interactive wizard
+
+# Test and debug
 python tests/test_global_state_workflow.py
-
-# Test candidate evaluation system  
-python tests/test_candidate_evaluation_system.py
-
-# Debug search functionality
 python test_search_debug.py
-
-# Debug LinkedIn page issues
-python debug_linkedin_page.py
 ```
 
 ## 📋 Example Output
@@ -229,7 +232,137 @@ name = line.substring(0, line.indexOf('View')).trim()  # "John SmithView John Sm
 
 ## 🔧 Configuration
 
-### **Environment Variables (.env)**
+### **📊 Comprehensive Configuration System**
+
+The agent includes a user-friendly configuration system with 15+ customizable parameters across all workflow phases:
+
+```bash
+# View current settings
+python configure.py --show
+
+# Apply preset configurations
+python configure.py --preset-high-quality    # Fewer but better candidates
+python configure.py --preset-volume          # More candidates, lower quality bar  
+python configure.py --preset-conservative    # Careful, thorough approach
+
+# Interactive configuration wizard
+python configure.py
+```
+
+**📋 Configuration Categories:**
+
+### 🔍 **Search Configuration**
+- **min_search_score** (7.0): Minimum quality score for candidates during search (0.0-10.0)
+- **min_evaluation_threshold** (6.0): Minimum score for final evaluation pass (0.0-10.0) 
+- **target_quality_candidates** (5): Target number of quality candidates (1-50)
+- **max_pages_per_search** (3): LinkedIn pages to search (1-10)
+- **quality_mode** ("adaptive"): Search strategy - "adaptive", "quality_first", "fast"
+
+### 📊 **Extraction Configuration** 
+- **delay_between_extractions** (1.0): Seconds between profile extractions (0.5-10.0)
+- **extraction_timeout** (30.0): Max seconds per profile extraction (10.0-120.0)
+- **validate_extraction_quality** (True): Check if extraction worked well
+- **retry_failed_extractions** (1): How many times to retry failures (0-5)
+
+### ⭐ **Evaluation Configuration**
+- **experience_weight** (0.3): How much experience matters (0.0-1.0)
+- **education_weight** (0.2): How much education matters (0.0-1.0)
+- **skills_weight** (0.2): How much skills matter (0.0-1.0)
+- **tier1_company_bonus** (2.0): Bonus for Google, Meta, etc. (0.0-5.0)
+- **seniority_bonus** (2.0): Bonus for senior/lead/principal (0.0-5.0)
+
+### 🔄 **Workflow Configuration**
+- **auto_proceed_to_extraction** (True): Automatically go to extraction when search is done
+- **auto_proceed_to_evaluation** (True): Automatically go to evaluation when extraction is done
+- **max_fallback_attempts** (2): How many fallback attempts to try
+- **enable_real_time_logging** (True): Show detailed progress in real-time
+
+**📚 [Complete Configuration Guide](docs/CONFIGURATION.md)** - Detailed documentation with examples, use cases, and advanced customization.
+
+### **🎚️ Configuration Presets**
+
+**High Quality Preset** - Executive search, specialized roles:
+```bash
+python configure.py --preset-high-quality
+# → min_search_score: 8.0, target_candidates: 3, quality_mode: "quality_first"
+```
+
+**Volume Preset** - High-volume recruiting, entry-level positions:
+```bash  
+python configure.py --preset-volume
+# → min_search_score: 6.0, target_candidates: 10, max_pages: 5, mode: "fast"
+```
+
+**Conservative Preset** - Compliance-sensitive environments:
+```bash
+python configure.py --preset-conservative  
+# → longer delays, more retries, careful processing
+```
+
+### **📝 Configuration Methods**
+
+**1. Interactive Wizard** (Easiest):
+```bash
+python configure.py  # Menu-driven configuration
+```
+
+**2. Direct File Editing**:
+```python
+from config_user import USER_CONFIG
+USER_CONFIG.search.min_search_score = 8.5
+USER_CONFIG.evaluation.tier1_company_bonus = 3.0
+```
+
+**3. Environment Variables**:
+```bash
+export MIN_SEARCH_SCORE=8.0
+export MIN_EVALUATION_THRESHOLD=7.0  
+export TARGET_QUALITY_CANDIDATES=3
+export EXTRACTION_DELAY=2.0
+python main.py --query "Senior Engineer" --limit 5
+```
+
+**4. Programmatic Configuration**:
+```python
+from config_user import configure_for_high_quality
+configure_for_high_quality()  # Apply preset + customize further
+```
+
+### **🎯 Common Configuration Scenarios**
+
+**Not Finding Enough Candidates:**
+```python
+USER_CONFIG.search.min_search_score = 6.0          # Lower threshold
+USER_CONFIG.search.max_pages_per_search = 5        # Search more pages
+USER_CONFIG.search.quality_mode = "adaptive"       # Smart extension
+```
+
+**Too Many Low-Quality Candidates:**
+```python
+USER_CONFIG.search.min_search_score = 8.0          # Raise standards
+USER_CONFIG.evaluation.tier1_company_bonus = 3.0   # Premium for top companies
+USER_CONFIG.search.quality_mode = "quality_first"  # Focus on quality
+```
+
+**LinkedIn Rate Limiting Issues:**
+```python
+USER_CONFIG.extraction.delay_between_extractions = 3.0  # Slower pace
+USER_CONFIG.search.max_pages_per_search = 2            # Fewer pages
+USER_CONFIG.extraction.retry_failed_extractions = 1     # Less retries
+```
+
+### **🔧 Configuration Testing**
+```bash
+# Verify configuration changes work
+python test_config_verification.py
+python test_config_functional.py
+
+# Test different presets impact
+python configure.py --preset-high-quality && python main.py --query "Engineer" --limit 3
+python configure.py --preset-volume && python main.py --query "Engineer" --limit 10
+```
+
+### **⚙️ System Configuration (.env)**
 ```bash
 # OpenAI Configuration
 OPENAI_API_KEY=your-api-key-here
@@ -243,17 +376,6 @@ DEFAULT_LOCATION="San Francisco Bay Area"
 
 # Browser Configuration
 CHROME_CDP_PORT=9222
-HEADLESS_MODE=true
-USER_DATA_DIR=./chrome_data
-
-# Anti-Detection
-MIN_DELAY_SECONDS=1.0
-MAX_DELAY_SECONDS=3.0
-TYPING_DELAY_PER_CHAR=0.05
-
-# Safety Limits
-MAX_CANDIDATES_PER_SEARCH=50
-MAX_PROFILES_PER_SESSION=20
 ```
 
 ## 🛠️ Development

@@ -13,20 +13,31 @@ from utils.logger import log_info, log_debug, log_error, log_progress, log_phase
 
 
 def evaluate_candidates_quality(
-    min_quality_threshold: float = 6.0,
-    target_count: int = 5
+    min_quality_threshold: Optional[float] = None,
+    target_count: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Comprehensive evaluation using global state architecture
     
     Args:
-        min_quality_threshold: Minimum acceptable quality score
-        target_count: Target number of quality candidates needed
+        min_quality_threshold: Minimum acceptable quality score (uses config default if None)
+        target_count: Target number of quality candidates needed (uses config default if None)
         
     Returns:
         Lightweight status dict: {success: True, candidates_evaluated: 10, quality_sufficient: True}
         Actual evaluation results stored in global state
     """
+    
+    # Load user configuration for defaults
+    from config_user import get_evaluation_config, get_search_config
+    search_config = get_search_config()
+    eval_config = get_evaluation_config()
+    
+    # Use config defaults if not provided
+    if min_quality_threshold is None:
+        min_quality_threshold = search_config.min_evaluation_threshold
+    if target_count is None:
+        target_count = search_config.target_quality_candidates
     
     log_info(f"🎯 Starting comprehensive candidate evaluation...", phase="EVALUATION")
     log_info(f"   Quality threshold: {min_quality_threshold}, Target count: {target_count}", phase="EVALUATION")
