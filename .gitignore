@@ -9,7 +9,7 @@ __pycache__/
 *.log
 *.json
 *.txt
-!example_job_description.txt
+!job_descriptions/*
 
 # Distribution / packaging
 .Python

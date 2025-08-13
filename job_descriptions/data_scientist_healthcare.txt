@@ -1,0 +1,36 @@
+Senior Data Scientist - Healthcare AI
+
+Join our mission to revolutionize healthcare through AI-powered diagnostic tools. We're seeking a Senior Data Scientist to build machine learning models that help doctors make better decisions.
+
+Key Responsibilities:
+- Develop machine learning models for medical image analysis and patient outcome prediction
+- Work with clinical researchers to understand healthcare data and requirements
+- Build data pipelines for processing large-scale medical datasets (EMR, imaging, genomics)
+- Deploy models in production healthcare environments with strict regulatory compliance
+- Collaborate with medical professionals to validate model performance and clinical utility
+
+Required Skills:
+- PhD or Master's in Data Science, Statistics, Computer Science, or related field
+- 4+ years of experience in machine learning and statistical modeling
+- Expertise in Python, R, SQL, and scientific computing libraries (pandas, numpy, scikit-learn)
+- Experience with deep learning frameworks (TensorFlow, PyTorch)
+- Knowledge of statistical analysis and experimental design
+- Experience with cloud platforms (AWS, GCP, Azure)
+
+Healthcare-Specific Requirements:
+- Understanding of HIPAA compliance and healthcare data security
+- Experience with medical data formats (DICOM, HL7, FHIR)
+- Knowledge of clinical trial design and regulatory requirements (FDA approval process)
+- Experience with time-series analysis for patient monitoring
+- Familiarity with medical terminology and clinical workflows
+
+Preferred Experience:
+- Previous work in healthcare, biotech, or medical device companies
+- Publication record in medical journals or top-tier ML conferences
+- Experience with computer vision for medical imaging
+- Knowledge of genomics and bioinformatics
+- Background in epidemiology or biostatistics
+
+Company: Healthcare AI startup backed by top VCs
+Location: Boston, MA or Remote
+Compensation: $180k-$250k + significant equity upside

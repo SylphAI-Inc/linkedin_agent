@@ -1,0 +1,38 @@
+Senior iOS Engineer - Consumer Social App
+
+Build the next generation of social experiences on iOS. We're looking for a mobile engineer passionate about creating delightful user experiences for millions of users.
+
+Key Responsibilities:
+- Develop and maintain our iOS app using Swift and modern iOS frameworks
+- Implement smooth animations and interactions that delight users
+- Optimize app performance for various iOS devices and versions
+- Collaborate with product and design teams to bring mockups to life
+- Write clean, maintainable code with comprehensive test coverage
+- Stay up-to-date with latest iOS development trends and Apple guidelines
+
+Required Skills:
+- 4+ years of iOS development experience with Swift
+- Deep understanding of iOS frameworks (UIKit, SwiftUI, Core Data, Core Animation)
+- Experience with iOS development tools (Xcode, Instruments, TestFlight)
+- Knowledge of app architecture patterns (MVC, MVVM, VIPER)
+- Understanding of memory management and performance optimization
+- Experience with RESTful APIs and networking (URLSession, Alamofire)
+
+Mobile-Specific Expertise:
+- App Store submission and review process
+- Push notifications and background processing
+- Camera and photo library integration
+- Social features (sharing, messaging, media upload)
+- In-app purchases and subscription management
+- Accessibility and localization best practices
+
+Preferred Experience:
+- Published apps with 100k+ downloads on the App Store
+- Experience with reactive programming (Combine, RxSwift)
+- Knowledge of video processing and real-time communication
+- Background in consumer social apps or entertainment platforms
+- Understanding of growth metrics and A/B testing
+
+Company: Fast-growing social media startup with 10M+ active users
+Location: Los Angeles, CA or Remote
+Compensation: $150k-$190k + equity + excellent perks (unlimited PTO, top-tier health insurance)

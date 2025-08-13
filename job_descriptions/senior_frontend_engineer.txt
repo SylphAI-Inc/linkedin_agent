@@ -1,0 +1,29 @@
+Senior Frontend Engineer - Fintech Startup
+
+We're looking for a Senior Frontend Engineer to join our growing fintech team building the next generation of investment tools.
+
+Key Responsibilities:
+- Build responsive web applications using React, TypeScript, and Next.js
+- Collaborate with product managers and designers to create intuitive user experiences
+- Optimize application performance and ensure cross-browser compatibility
+- Implement secure authentication and data visualization features
+- Mentor junior developers and contribute to code reviews
+
+Required Skills:
+- 5+ years of frontend development experience
+- Expert knowledge of React, TypeScript, HTML5, CSS3
+- Experience with state management (Redux, Zustand)
+- Proficiency in modern build tools (Webpack, Vite)
+- Understanding of RESTful APIs and GraphQL
+- Experience with testing frameworks (Jest, Cypress)
+
+Preferred Experience:
+- Previous fintech or financial services experience
+- Knowledge of data visualization libraries (D3.js, Chart.js)
+- Experience with micro-frontend architectures
+- Familiarity with AWS or cloud platforms
+- Background in responsive design and accessibility
+
+Company: Series B fintech startup, 100+ employees
+Location: San Francisco, CA (Hybrid)
+Compensation: $160k-$200k + equity

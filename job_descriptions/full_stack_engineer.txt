@@ -1,0 +1,46 @@
+Full Stack Engineer - EdTech Platform
+
+Help us democratize education by building tools that make learning accessible to everyone. We're seeking a versatile full-stack engineer to work across our entire technology stack.
+
+Key Responsibilities:
+- Build scalable web applications using React, Node.js, and PostgreSQL
+- Develop APIs and microservices for our learning management system
+- Create interactive learning experiences and educational content tools
+- Implement real-time features for collaborative learning (video calls, shared whiteboards)
+- Optimize database queries and application performance
+- Collaborate with educators to understand pedagogical requirements
+
+Technical Stack:
+- Frontend: React, TypeScript, Next.js, Tailwind CSS
+- Backend: Node.js, Express, GraphQL, REST APIs
+- Database: PostgreSQL, Redis for caching
+- Infrastructure: AWS (EC2, RDS, S3), Docker, Kubernetes
+- Real-time: WebSockets, Socket.io
+- Testing: Jest, Cypress, Playwright
+
+Required Skills:
+- 3+ years of full-stack development experience
+- Proficiency in JavaScript/TypeScript and modern frameworks
+- Experience with SQL databases and query optimization
+- Knowledge of RESTful API design and GraphQL
+- Understanding of version control (Git) and agile development
+- Experience with cloud platforms and deployment pipelines
+
+EdTech-Specific Features:
+- Video streaming and content delivery optimization
+- User progress tracking and analytics
+- Interactive quiz and assessment tools
+- Integration with educational standards and curriculum
+- Accessibility features for diverse learning needs
+- Mobile-responsive design for various devices
+
+Preferred Experience:
+- Previous work in education technology or e-learning
+- Experience with video processing and WebRTC
+- Knowledge of learning analytics and student engagement metrics
+- Understanding of educational pedagogy and learning science
+- Background in open-source contributions
+
+Company: Mission-driven EdTech startup serving K-12 and higher education
+Location: Seattle, WA (Hybrid) or Remote
+Compensation: $120k-$160k + equity + impact-focused culture

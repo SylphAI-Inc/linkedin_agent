@@ -1,0 +1,38 @@
+DevOps Engineer - Cloud Infrastructure
+
+We're scaling rapidly and need a DevOps Engineer to build robust, secure infrastructure that can handle millions of users. Join us in building the backbone of our platform.
+
+Key Responsibilities:
+- Design and maintain scalable cloud infrastructure on AWS/GCP
+- Build CI/CD pipelines for automated testing and deployment
+- Implement infrastructure as code using Terraform and CloudFormation
+- Monitor system performance and optimize for cost and reliability
+- Ensure security best practices and compliance across all environments
+- Collaborate with development teams to improve deployment processes
+
+Required Skills:
+- 3+ years of DevOps/Infrastructure engineering experience
+- Strong experience with cloud platforms (AWS preferred, GCP/Azure acceptable)
+- Proficiency in Infrastructure as Code (Terraform, CloudFormation, Pulumi)
+- Experience with containerization (Docker, Kubernetes)
+- Knowledge of CI/CD tools (Jenkins, GitLab CI, GitHub Actions)
+- Scripting languages (Python, Bash, Go)
+- Monitoring and observability tools (Prometheus, Grafana, ELK stack)
+
+Infrastructure Expertise:
+- Auto-scaling and load balancing strategies
+- Database administration (PostgreSQL, MySQL, Redis)
+- Security practices (IAM, VPC, secrets management)
+- Networking fundamentals (DNS, CDN, SSL/TLS)
+- Backup and disaster recovery procedures
+
+Preferred Experience:
+- Kubernetes certification or extensive container orchestration experience
+- Experience with microservices architectures
+- Knowledge of security scanning and vulnerability management
+- Previous work at high-scale companies (handling 10M+ requests/day)
+- Experience with compliance frameworks (SOC2, GDPR)
+
+Company: B2B SaaS platform serving enterprise clients
+Location: Austin, TX or Remote
+Compensation: $140k-$180k + equity + excellent benefits
