@@ -14,7 +14,7 @@ Transforms manual LinkedIn recruiting:
 5. Send DMs to interesting candidates
 
 ✅ AFTER: Automated AI agent (minutes per search)  
-1. Run: python runner/run_linkedin_agent.py --query "Product Manager" --limit 10
+1. Run: linkedin-agent --query "Product Manager" --limit 10
 2. Agent finds, extracts, and scores candidates automatically
 3. Get structured results with names, titles, profiles, LinkedIn URLs
 ```
@@ -93,42 +93,50 @@ Transforms manual LinkedIn recruiting:
 git clone <your-repo>
 cd linkedin_agent
 poetry install
-poetry shell
 
 # Configure environment
 cp .env.example .env
 # Edit .env with your OPENAI_API_KEY
+
+# Test installation
+linkedin-agent --help
+linkedin-config --help
 ```
+
+### CLI Commands Available
+After installation, you have two professional CLI tools:
+- **`linkedin-agent`** - Main recruitment agent
+- **`linkedin-config`** - Configuration management tool
 
 ## 🚀 Usage
 
 ### **Basic Usage**
 ```bash
 # Find Product Managers in San Francisco (new main.py entry point)
-python main.py --query "Product Manager" --location "San Francisco Bay Area" --limit 5
+linkedin-agent --query "Product Manager" --location "San Francisco Bay Area" --limit 5
 
 # With job description for enhanced targeting
-python main.py --job-description example_job_description.txt --limit 10
+linkedin-agent --job-description example_job_description.txt --limit 10
 
 # Find Software Engineers (any location)  
-python main.py --query "Software Engineer" --limit 10
+linkedin-agent --query "Software Engineer" --limit 10
 
 # Find Data Scientists with specific location
-python main.py --query "Data Scientist" --location "New York" --limit 3
+linkedin-agent --query "Data Scientist" --location "New York" --limit 3
 ```
 
 ### **Advanced Usage**
 ```bash
 # Configure for high-quality candidates (fewer but better)
-python configure.py --preset-high-quality
-python main.py --job-description example_job_description.txt --limit 3
+linkedin-config --preset-high-quality
+linkedin-agent --job-description example_job_description.txt --limit 3
 
 # Configure for volume (more candidates)  
-python configure.py --preset-volume
-python main.py --query "Software Engineer" --limit 15
+linkedin-config --preset-volume
+linkedin-agent --query "Software Engineer" --limit 15
 
 # Custom configuration
-python configure.py  # Interactive wizard
+linkedin-config  # Interactive wizard
 
 # Test and debug
 python tests/test_global_state_workflow.py
@@ -238,15 +246,15 @@ The agent includes a user-friendly configuration system with 15+ customizable pa
 
 ```bash
 # View current settings
-python configure.py --show
+linkedin-config --show
 
 # Apply preset configurations
-python configure.py --preset-high-quality    # Fewer but better candidates
-python configure.py --preset-volume          # More candidates, lower quality bar  
-python configure.py --preset-conservative    # Careful, thorough approach
+linkedin-config --preset-high-quality    # Fewer but better candidates
+linkedin-config --preset-volume          # More candidates, lower quality bar  
+linkedin-config --preset-conservative    # Careful, thorough approach
 
 # Interactive configuration wizard
-python configure.py
+linkedin-config
 ```
 
 **📋 Configuration Categories:**
@@ -283,19 +291,19 @@ python configure.py
 
 **High Quality Preset** - Executive search, specialized roles:
 ```bash
-python configure.py --preset-high-quality
+linkedin-config --preset-high-quality
 # → min_search_score: 8.0, target_candidates: 3, quality_mode: "quality_first"
 ```
 
 **Volume Preset** - High-volume recruiting, entry-level positions:
 ```bash  
-python configure.py --preset-volume
+linkedin-config --preset-volume
 # → min_search_score: 6.0, target_candidates: 10, max_pages: 5, mode: "fast"
 ```
 
 **Conservative Preset** - Compliance-sensitive environments:
 ```bash
-python configure.py --preset-conservative  
+linkedin-config --preset-conservative  
 # → longer delays, more retries, careful processing
 ```
 
@@ -303,7 +311,7 @@ python configure.py --preset-conservative
 
 **1. Interactive Wizard** (Easiest):
 ```bash
-python configure.py  # Menu-driven configuration
+linkedin-config  # Menu-driven configuration
 ```
 
 **2. Direct File Editing**:
@@ -319,7 +327,7 @@ export MIN_SEARCH_SCORE=8.0
 export MIN_EVALUATION_THRESHOLD=7.0  
 export TARGET_QUALITY_CANDIDATES=3
 export EXTRACTION_DELAY=2.0
-python main.py --query "Senior Engineer" --limit 5
+linkedin-agent --query "Senior Engineer" --limit 5
 ```
 
 **4. Programmatic Configuration**:
@@ -358,8 +366,8 @@ python test_config_verification.py
 python test_config_functional.py
 
 # Test different presets impact
-python configure.py --preset-high-quality && python main.py --query "Engineer" --limit 3
-python configure.py --preset-volume && python main.py --query "Engineer" --limit 10
+linkedin-config --preset-high-quality && linkedin-agent --query "Engineer" --limit 3
+linkedin-config --preset-volume && linkedin-agent --query "Engineer" --limit 10
 ```
 
 ### **⚙️ System Configuration (.env)**
@@ -469,10 +477,10 @@ HEADLESS_MODE=true python test_search_debug.py
 ### **Debug Mode**
 ```bash
 # Enable verbose logging
-LOG_LEVEL=DEBUG python runner/run_linkedin_agent.py --query "Engineer"
+LOG_LEVEL=DEBUG linkedin-agent --query "Engineer"
 
 # Test without headless mode (see browser)
-python runner/run_linkedin_agent.py --query "Manager" --limit 2
+linkedin-agent --query "Manager" --limit 2
 ```
 
 ## 📊 Performance
@@ -504,5 +512,5 @@ This is a production-ready system with comprehensive error handling, modern arch
 **🎯 Ready to automate your LinkedIn recruiting?** 
 
 ```bash
-HEADLESS_MODE=true python runner/run_linkedin_agent.py --query "Your Dream Role" --limit 10
+HEADLESS_MODE=true linkedin-agent --query "Your Dream Role" --limit 10
 ```

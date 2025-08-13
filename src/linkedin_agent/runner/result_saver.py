@@ -16,7 +16,7 @@ def save_recruitment_results(candidates: List[Dict[str, Any]],
     
     # Get repo root and create results directory
     current_file = Path(__file__).resolve()
-    repo_root = current_file.parents[1]  # Go up from runner/ to repo root
+    repo_root = current_file.parents[3]  # Go up from src/linkedin_agent/runner/ to repo root
     results_dir = repo_root / output_dir
     results_dir.mkdir(exist_ok=True)
     
