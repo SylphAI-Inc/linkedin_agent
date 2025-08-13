@@ -21,7 +21,7 @@ Transforms manual LinkedIn recruiting:
 
 ## 🧠 How It Works - Global State Architecture
 
-### **🚀 Global State Architecture (NEW)**
+### **🚀 Global State Architecture**
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   User Query    │───▶│  AdalFlow Agent  │───▶│ Chrome Browser  │
