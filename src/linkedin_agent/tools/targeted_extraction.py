@@ -33,7 +33,7 @@ def extract_candidate_profiles(
     """
     
     # Load user configuration for defaults
-    from config_user import get_extraction_config
+    from ..config_user import get_extraction_config
     extraction_config = get_extraction_config()
     
     # Use config defaults if not provided

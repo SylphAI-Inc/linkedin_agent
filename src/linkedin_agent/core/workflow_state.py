@@ -61,7 +61,7 @@ class WorkflowState:
     def get_strategy(self) -> Optional[Dict[str, Any]]:
         """Get stored strategy"""
         # Debug logging to track strategy retrieval
-        from utils.logger import log_debug
+        from ..utils.logger import log_debug
         log_debug(f"get_strategy called, strategy exists: {self._strategy is not None}", phase="WORKFLOW_STATE")
         if self._strategy:
             log_debug(f"Strategy query: {self._strategy.get('original_query', 'Unknown')}", phase="WORKFLOW_STATE")
@@ -86,7 +86,7 @@ class WorkflowState:
     # Extraction Results Management
     def set_extraction_results(self, extracted_profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Store extraction results"""
-        from utils.logger import log_debug
+        from ..utils.logger import log_debug
         log_debug(f"set_extraction_results called with {len(extracted_profiles)} profiles", phase="WORKFLOW_STATE")
         log_debug(f"Global state instance ID: {id(self)}", phase="WORKFLOW_STATE")
         self._extraction_results = extracted_profiles
@@ -104,7 +104,7 @@ class WorkflowState:
     def get_extraction_results(self) -> List[Dict[str, Any]]:
         """Get stored extraction results for evaluation"""
         # Debug logging to track the issue
-        from utils.logger import log_debug
+        from ..utils.logger import log_debug
         log_debug(f"get_extraction_results called, found {len(self._extraction_results)} profiles", phase="WORKFLOW_STATE")
         log_debug(f"Global state instance ID: {id(self)}", phase="WORKFLOW_STATE")
         if self._extraction_results:
@@ -202,7 +202,7 @@ class WorkflowState:
             "timestamp": datetime.now().isoformat(),
             "duration_from_start": (datetime.now() - self._start_time).total_seconds()
         })
-        from utils.logger import log_info
+        from ..utils.logger import log_info
         log_info(f"Workflow phase: {old_phase} → {new_phase}", phase="WORKFLOW_STATE")
     
     def _is_ready_for_next_phase(self) -> bool:

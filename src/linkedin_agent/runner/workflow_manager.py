@@ -81,7 +81,7 @@ class LinkedInWorkflowManager:
             agent_results = self._extract_results_from_agent(result)
             
             # Get candidates from global state (new architecture)
-            from core.workflow_state import get_complete_workflow_data
+            from ..core.workflow_state import get_complete_workflow_data
             workflow_data = get_complete_workflow_data()
             
             # Build proper candidate structure for result saving by combining extraction and evaluation data
@@ -200,7 +200,7 @@ class LinkedInWorkflowManager:
     def save_results(self, candidates: List[Dict[str, Any]], output_dir: str = "results", strategy_data: Dict[str, Any] = None) -> Dict[str, str]:
         """Step 4: Save recruitment results with error handling"""
         try:
-            from runner.result_saver import save_recruitment_results
+            from .result_saver import save_recruitment_results
             
             search_params = {
                 "query": self.query,
@@ -382,7 +382,7 @@ class LinkedInWorkflowManager:
         if len(candidates) == 0:
             print(f"🔄 Merge returned 0 candidates, checking global state fallback...")
             try:
-                from core.workflow_state import get_profiles_for_evaluation, get_evaluation_results, get_outreach_results
+                from ..core.workflow_state import get_profiles_for_evaluation, get_evaluation_results, get_outreach_results
                 
                 # Get basic profile data from global state
                 profiles = get_profiles_for_evaluation()
@@ -428,7 +428,7 @@ class LinkedInWorkflowManager:
         
         # Global state architecture: Get actual data from global state instead of function results
         try:
-            from core.workflow_state import get_profiles_for_evaluation, get_candidates_for_outreach
+            from ..core.workflow_state import get_profiles_for_evaluation, get_candidates_for_outreach
             
             # Get extraction results from global state
             batch_results = get_profiles_for_evaluation()
@@ -447,7 +447,7 @@ class LinkedInWorkflowManager:
             
             # Global state: Get evaluation results from global state
             try:
-                from core.workflow_state import get_evaluation_results
+                from ..core.workflow_state import get_evaluation_results
                 evaluation_data = get_evaluation_results()
                 if evaluation_data and isinstance(evaluation_data, dict):
                     all_evaluated = evaluation_data.get('all_evaluated_candidates', [])
@@ -476,7 +476,7 @@ class LinkedInWorkflowManager:
             
             # Global state: Get outreach results from global state
             try:
-                from core.workflow_state import get_outreach_results
+                from ..core.workflow_state import get_outreach_results
                 outreach_results_data = get_outreach_results()
                 if outreach_results_data and isinstance(outreach_results_data, dict):
                     outreach_messages = outreach_results_data.get('messages', [])
@@ -694,9 +694,9 @@ class LinkedInWorkflowManager:
         print("🔄 Executing fallback workflow...")
         
         try:
-            from tools.people_search import search_people
-            from tools.profile_extractor import extract_profile  # Fixed import
-            from tools.web_nav import go
+            from ..tools.people_search import search_people
+            from ..tools.profile_extractor import extract_profile  # Fixed import
+            from ..tools.web_nav import go
             import time
             
             # Direct search
@@ -817,8 +817,8 @@ class LinkedInWorkflowManager:
         candidates = []
         
         try:
-            from tools.profile_extractor import extract_profile  # Fixed import path
-            from tools.web_nav import go, get_current_url
+            from ..tools.profile_extractor import extract_profile  # Fixed import path
+            from ..tools.web_nav import go, get_current_url
             import time
             
             for i, url in enumerate(urls[:self.limit], 1):

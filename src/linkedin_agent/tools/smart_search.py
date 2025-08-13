@@ -123,7 +123,7 @@ def smart_candidate_search(
     """
     
     # Load user configuration for defaults
-    from config_user import get_search_config
+    from ..config_user import get_search_config
     search_config = get_search_config()
     
     # Use config defaults if not provided

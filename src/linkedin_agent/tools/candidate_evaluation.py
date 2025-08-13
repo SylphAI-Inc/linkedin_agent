@@ -29,7 +29,7 @@ def evaluate_candidates_quality(
     """
     
     # Load user configuration for defaults
-    from config_user import get_evaluation_config, get_search_config
+    from ..config_user import get_evaluation_config, get_search_config
     search_config = get_search_config()
     eval_config = get_evaluation_config()
     
@@ -58,7 +58,7 @@ def evaluate_candidates_quality(
         log_debug(f"Checking global workflow state...", phase="EVALUATION")
         
         # Import workflow state to check status
-        from core.workflow_state import get_workflow_summary, _workflow_state
+        from ..core.workflow_state import get_workflow_summary, _workflow_state
         workflow_status = get_workflow_summary()
         log_debug(f"Current workflow phase: {workflow_status.get('current_phase')}", phase="EVALUATION")
         log_debug(f"Candidates extracted: {workflow_status.get('candidates_extracted')}", phase="EVALUATION")
@@ -134,7 +134,7 @@ def evaluate_candidates_quality(
     # HEAP CLEANUP: Remove low-quality candidates from search heap
     log_info(f"\n🧹 HEAP CLEANUP: Removing low-quality candidates from search heap...")
     try:
-        from tools.smart_search import get_current_search_heap
+        from .smart_search import get_current_search_heap
         
         heap = get_current_search_heap()
         if heap and hasattr(heap, 'remove_low_quality_candidates'):
@@ -214,7 +214,7 @@ def _get_candidates_from_sources() -> List[Dict[str, Any]]:
     
     try:
         # Try to get from extraction summary first
-        from tools.targeted_extraction import get_extraction_summary
+        from .targeted_extraction import get_extraction_summary
         extraction_summary = get_extraction_summary()
         
         if extraction_summary.get("success") and extraction_summary.get("results"):
@@ -231,7 +231,7 @@ def _get_candidates_from_sources() -> List[Dict[str, Any]]:
     # Fallback to collector if no extraction results
     if not candidates:
         try:
-            from tools.smart_search import get_collected_candidates
+            from .smart_search import get_collected_candidates
             collector_result = get_collected_candidates(limit=20, sort_by_score=True)
             
             if collector_result.get("candidates"):
@@ -551,7 +551,7 @@ def _generate_fallback_recommendation(stats: Dict[str, Any], avg_score: float, q
     
     # Check current heap state after cleanup
     try:
-        from tools.smart_search import get_current_search_heap
+        from .smart_search import get_current_search_heap
         heap = get_current_search_heap()
         remaining_heap_size = len(heap.heap) if heap and hasattr(heap, 'heap') else 0
     except:
@@ -571,7 +571,7 @@ def _generate_fallback_recommendation(stats: Dict[str, Any], avg_score: float, q
         else:  # Heap too small, expand search to add more candidates
             # Get the last search page info to continue from where we left off
             try:
-                from tools.smart_search import get_last_search_info
+                from .smart_search import get_last_search_info
                 search_info = get_last_search_info()
                 next_page = search_info.get("next_start_page", 3) if search_info else 3
             except:
@@ -597,7 +597,7 @@ def _generate_fallback_recommendation(stats: Dict[str, Any], avg_score: float, q
         else:  # Heap insufficient, expand search to add more candidates
             # Get the last search page info to continue from where we left off
             try:
-                from tools.smart_search import get_last_search_info
+                from .smart_search import get_last_search_info
                 search_info = get_last_search_info()
                 next_page = search_info.get("next_start_page", 3) if search_info else 3
             except:

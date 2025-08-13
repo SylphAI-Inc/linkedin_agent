@@ -7,7 +7,6 @@ from adalflow.components.model_client.openai_client import OpenAIClient
 from adalflow.core.func_tool import FunctionTool
 
 from ..config import AgentConfig, get_model_kwargs
-from ..tools.web_nav import GoTool, ClickTool, TypeTool, KeyTool, JsTool, WaitTool
 from ..tools.linkedin_auth import CheckAuthTool, NavigateLinkedInTool, PromptLoginTool
 from ..tools.smart_search import SmartCandidateSearchTool, GetCollectedCandidatesTool
 from ..tools.targeted_extraction import ExtractCandidateProfilesTool
@@ -42,14 +41,7 @@ class LinkedInAgent:
 
         # Prepare default tools if none provided
         self.tools = [
-            # Navigation tools
-            GoTool,
-            ClickTool,
-            TypeTool,
-            KeyTool,
-            JsTool,
-            WaitTool,
-            # LinkedIn-specific tools
+            # LinkedIn authentication and navigation
             CheckAuthTool,
             NavigateLinkedInTool, 
             PromptLoginTool,

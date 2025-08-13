@@ -52,7 +52,7 @@ def generate_candidate_outreach(
     log_info(f"🔄 Retrieved {len(candidates)} quality candidates from global state", phase="OUTREACH")
     
     # Get strategy from global state
-    from core.workflow_state import get_strategy_for_search
+    from ..core.workflow_state import get_strategy_for_search
     strategy = get_strategy_for_search()
     
     log_info(f"📊 Generating outreach for {len(candidates)} candidates...", phase="OUTREACH")
@@ -463,7 +463,7 @@ def _get_evaluated_candidates() -> List[Dict[str, Any]]:
     """Get candidates from evaluation results"""
     try:
         # Try to import and use the evaluation tool to get results
-        from tools.candidate_evaluation import evaluate_candidates_quality
+        from .candidate_evaluation import evaluate_candidates_quality
         
         # Get evaluation results (this will use defaults if no candidates passed)
         eval_results = evaluate_candidates_quality()

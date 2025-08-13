@@ -109,7 +109,7 @@ def save_recruitment_results(candidates: List[Dict[str, Any]],
     outreach_file = None
     if outreach_data:
         try:
-            from tools.candidate_outreach import save_outreach_results
+            from ..tools.candidate_outreach import save_outreach_results
             outreach_file = save_outreach_results(outreach_data)
             print("📧 Outreach results saved alongside other recruitment data")
         except Exception as e:
