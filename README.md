@@ -108,7 +108,7 @@ cp .env.example .env
 python main.py --query "Product Manager" --location "San Francisco Bay Area" --limit 5
 
 # With job description for enhanced targeting
-python main.py --job-description job_desc.txt --limit 10
+python main.py --job-description example_job_description.txt --limit 10
 
 # Find Software Engineers (any location)  
 python main.py --query "Software Engineer" --limit 10
@@ -121,7 +121,7 @@ python main.py --query "Data Scientist" --location "New York" --limit 3
 ```bash
 # Configure for high-quality candidates (fewer but better)
 python configure.py --preset-high-quality
-python main.py --job-description job_desc.txt --limit 3
+python main.py --job-description example_job_description.txt --limit 3
 
 # Configure for volume (more candidates)  
 python configure.py --preset-volume
