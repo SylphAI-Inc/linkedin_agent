@@ -43,8 +43,10 @@ def evaluate_candidates_quality(
     log_info(f"   Quality threshold: {min_quality_threshold}, Target count: {target_count}", phase="EVALUATION")
     log_progress("Initializing evaluation system", "EVALUATION")
     
-    # Get candidates and strategy from global state
+    # Get candidates from global state
     candidates = get_profiles_for_evaluation()
+    
+    # Strategy is now optional - can work without it
     strategy = get_strategy_for_search()
     
     log_debug(f"Retrieved candidates type: {type(candidates)}", phase="EVALUATION")
@@ -84,11 +86,17 @@ def evaluate_candidates_quality(
         }
     
     if not strategy:
-        return {
-            "success": False,
-            "error": "No strategy found in global state. Run create_search_strategy first.",
-            "quality_sufficient": False,
-            "candidates_evaluated": 0
+        log_info(f"📊 No strategy found, using basic evaluation criteria", phase="EVALUATION")
+        # Create a simple fallback strategy for evaluation
+        strategy = {
+            "headline_analysis": {
+                "target_job_titles": [],
+                "seniority_keywords": ["senior", "lead", "principal", "staff"],
+                "tech_stack_signals": []
+            },
+            "profile_evaluation_context": {
+                "focus_areas": ["experience", "skills", "education"]
+            }
         }
     
     log_info(f"📊 PHASE 2: Starting individual candidate assessment...")

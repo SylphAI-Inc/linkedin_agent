@@ -15,7 +15,7 @@ from ..tools.candidate_outreach import (
     CandidateOutreachGenerationTool,  # New agent tool for outreach generation
     SaveOutreachResultsTool  # Used by workflow manager to save outreach results
 )
-from ..tools.strategy_creation import CreateSearchStrategyTool
+# Strategy tool removed - redundant step
 
 
 class LinkedInAgent:
@@ -30,8 +30,8 @@ class LinkedInAgent:
         self,
         model_client: Optional[OpenAIClient] = None,
         model_kwargs: Optional[Dict[str, Any]] = None,
-        tools: Optional[List[Any]] = None,
         max_steps: Optional[int] = None,
+        role_desc: Optional[str] = None,
         **kwargs,
     ) -> None:
         # Defaults
@@ -45,17 +45,21 @@ class LinkedInAgent:
             CheckAuthTool,
             NavigateLinkedInTool, 
             PromptLoginTool,
-            # Modern agentic workflow tools (5-step process)
-            CreateSearchStrategyTool,  # 1. Generate recruitment strategy
-            SmartCandidateSearchTool,  # 2. Strategy-based candidate discovery & quality heap
-            GetCollectedCandidatesTool,  # 2b. Access heap backup candidates (used in fallback)
-            ExtractCandidateProfilesTool,  # 3. Extract detailed profiles from candidate heap
-            CandidateEvaluationTool,  # 4. Comprehensive quality evaluation with fallback recommendations
-            CandidateOutreachGenerationTool,  # 5. Generate personalized outreach messages
+            # Simplified 4-step workflow (strategy removed as redundant)
+            SmartCandidateSearchTool,  # 1. Smart candidate discovery with quality scoring
+            GetCollectedCandidatesTool,  # 1b. Access heap backup candidates (used in fallback)
+            ExtractCandidateProfilesTool,  # 2. Extract detailed profiles from candidate heap
+            CandidateEvaluationTool,  # 3. Comprehensive quality evaluation with fallback recommendations
+            CandidateOutreachGenerationTool,  # 4. Generate personalized outreach messages
             # Legacy tools (used by workflow manager for backwards compatibility)
             SaveOutreachResultsTool,  # Save outreach results to file
         ]
 
+        # Get default role description if not provided
+        if not role_desc:
+            from ..utils.role_prompts import get_agent_role
+            role_desc = get_agent_role()
+        
         # Initialize Agent and Runner
         self.agent = Agent(
             name="LinkedInRecruiter",
@@ -63,6 +67,7 @@ class LinkedInAgent:
             model_client=model_client,
             model_kwargs=model_kwargs,
             max_steps=max_steps,
+            role_desc=role_desc,
             **kwargs,
         )
         self.runner = Runner(agent=self.agent, max_steps=max_steps)

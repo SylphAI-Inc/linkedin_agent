@@ -176,13 +176,25 @@ def evaluate_headline_with_strategy(headline: str, strategy: Dict[str, Any]) -> 
         "signals": signals
     }
 
-def search_people(query: str, location: str = "", limit: int = 10) -> Dict[str, Any]:
+def search_people(query: str, location: str = "", limit: int = 10, network_filter: str = "F") -> Dict[str, Any]:
     """Navigate LinkedIn people search and return lightweight result cards (name, subtitle, url).
+
+    Args:
+        query: Search keywords
+        location: Location filter
+        limit: Maximum number of results
+        network_filter: Network connection filter:
+            "F" = 1st degree connections only
+            "S" = 2nd degree connections
+            "O" = 3rd+ degree connections
+            "" = All connections (default behavior)
 
     Returns a structured payload to help the agent reason:
       { "count": int, "results": [{ name, subtitle, url }] }
     """
     q = (query + (f" {location}" if location else "")).strip()
+    
+    # Navigate to LinkedIn people search
     url = f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(q)}"
     nav_go(url)
     # Wait for search results 
@@ -191,6 +203,84 @@ def search_people(query: str, location: str = "", limit: int = 10) -> Dict[str, 
     # Prefer People tab when present (best-effort)
     _js_click_first(PEOPLE_TAB)
     nav_wait(".search-results-container li", 5)
+    
+    # Apply network connection filter for 1st degree connections
+    if network_filter == "F":  # 1st degree connections
+        print("[DEBUG] Attempting to apply 1st degree connection filter...")
+        
+        # First, try URL parameter approach with correct LinkedIn format
+        current_url = run_js("window.location.href")
+        if "network=" not in current_url:
+            # Add network parameter to URL and reload
+            new_url = f"{current_url}&network=[%22F%22]"
+            nav_go(new_url)
+            nav_wait(".search-results-container li, .search-no-results", 10)
+        
+        # Fallback: Try clicking UI filter elements
+        time.sleep(2)  # Wait for page to fully load
+        
+        filter_applied = run_js("""
+        (() => {
+            console.log('Attempting to apply 1st degree connection filter...');
+            
+            // Method 1: Look for connection degree buttons in sidebar
+            const connectionButtons = document.querySelectorAll('button, .search-s-facet__button, .search-reusables__filter-trigger');
+            for (let btn of connectionButtons) {
+                const text = btn.textContent.toLowerCase().trim();
+                const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
+                
+                if (text.includes('1st') || text.includes('first') || ariaLabel.includes('1st') || ariaLabel.includes('first')) {
+                    console.log('Found 1st degree button:', btn);
+                    btn.click();
+                    return 'clicked_1st_button';
+                }
+            }
+            
+            // Method 2: Look for "All filters" modal approach
+            const allFiltersBtn = Array.from(document.querySelectorAll('button')).find(btn => 
+                btn.textContent.toLowerCase().includes('filter') || btn.textContent.toLowerCase().includes('show all')
+            );
+            
+            if (allFiltersBtn) {
+                console.log('Clicking all filters button');
+                allFiltersBtn.click();
+                
+                // Wait and look for network options in modal
+                setTimeout(() => {
+                    const networkOptions = document.querySelectorAll('input[type="checkbox"], label');
+                    for (let option of networkOptions) {
+                        const text = option.textContent?.toLowerCase() || '';
+                        const value = option.value?.toLowerCase() || '';
+                        
+                        if (text.includes('1st') || text.includes('first') || value.includes('f')) {
+                            console.log('Found network option:', option);
+                            if (option.tagName === 'INPUT') {
+                                option.checked = true;
+                                option.dispatchEvent(new Event('change'));
+                            } else {
+                                option.click();
+                            }
+                            
+                            // Apply filters
+                            const applyBtn = document.querySelector('button[data-test-id="apply-filters"], button:contains("Apply")');
+                            if (applyBtn) applyBtn.click();
+                            
+                            return 'applied_via_modal';
+                        }
+                    }
+                }, 1000);
+                
+                return 'opened_modal';
+            }
+            
+            return 'no_filter_found';
+        })()
+        """)
+        
+        print(f"[DEBUG] Filter application result: {filter_applied}")
+        
+        # Wait for results to update after filter
+        nav_wait(".search-results-container li", 8)
 
     # Check for results using the correct selector
     code_count = """
@@ -212,11 +302,26 @@ def search_people(query: str, location: str = "", limit: int = 10) -> Dict[str, 
 
     code_collect = f"""
     (() => {{
-      const containers = Array.from(document.querySelectorAll('.search-results-container li')).slice(0, {limit});
+      const containers = Array.from(document.querySelectorAll('.search-results-container li')).slice(0, {limit * 3}); // Get more results for filtering
       
       return containers.map(li => {{
         const profileLink = li.querySelector('a[href*="/in/"]');
         const lines = li.textContent.split('\\n').map(l => l.trim()).filter(l => l && l !== 'Status is offline');
+        
+        // Find connection degree info
+        let connectionDegree = null;
+        for (const line of lines) {{
+          if (line.includes('1st degree connection') || line.includes('1st-degree connection')) {{
+            connectionDegree = '1st';
+            break;
+          }} else if (line.includes('2nd degree connection') || line.includes('2nd-degree connection')) {{
+            connectionDegree = '2nd';
+            break;
+          }} else if (line.includes('3rd degree connection') || line.includes('3rd+ degree connection')) {{
+            connectionDegree = '3rd+';
+            break;
+          }}
+        }}
         
         // Find name using LinkedIn's pattern
         let name = null;
@@ -251,7 +356,8 @@ def search_people(query: str, location: str = "", limit: int = 10) -> Dict[str, 
         return {{
           name: name || null,
           subtitle: subtitle || null, 
-          url: profileLink?.href || null
+          url: profileLink?.href || null,
+          connection_degree: connectionDegree
         }};
       }}).filter(x => x.url && x.name);
     }})()

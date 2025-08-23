@@ -57,13 +57,12 @@ Transforms manual LinkedIn recruiting:
 - 🔄 **Persistent**: Data flows seamlessly across workflow phases
 - 🎯 **Lightweight**: Agent gets status messages, not full datasets
 
-### **🔄 5-Phase Agentic Workflow**
+### **🔄 4-Phase Agentic Workflow**
 
-1. **📋 STRATEGY**: AI generates targeted search strategy → Global State
-2. **🔍 SEARCH**: Smart LinkedIn search with quality scoring → Global State  
-3. **📊 EXTRACT**: Full profile data extraction → Global State
-4. **⭐ EVALUATE**: Comprehensive candidate scoring → Global State
-5. **💌 OUTREACH**: Personalized message generation → Global State
+1. **🔍 SEARCH**: Smart LinkedIn search with quality scoring → Global State  
+2. **📊 EXTRACT**: Full profile data extraction → Global State
+3. **⭐ EVALUATE**: Comprehensive candidate scoring → Global State
+4. **💌 OUTREACH**: Personalized message generation → Global State
 
 **🎯 Each phase:**
 - Gets lightweight status messages (not large data)
@@ -113,7 +112,7 @@ After installation, you have two professional CLI tools:
 ### **Basic Usage**
 ```bash
 # Find Product Managers in San Francisco (new main.py entry point)
-linkedin-agent --query "Product Manager" --location "San Francisco Bay Area" --limit 5
+linkedin-agent --query "Backend engineer" --location "San Francisco Bay Area" --limit 5
 
 # With job description for enhanced targeting
 linkedin-agent --job-description example_job_description.txt --limit 10
@@ -146,10 +145,6 @@ python test_search_debug.py
 ## 📋 Example Output
 
 ```
-🚀 PHASE: STRATEGY - AI-Generated Search Strategy
-✅ Strategy created with 9 components
-📊 Key focus areas: python, javascript, react
-
 🚀 PHASE: SEARCH - Smart LinkedIn Search  
 🔍 Candidates found on page 1:
    1. Madeline Zhang - Senior Software Engineer @Airbnb | Ex-Google
@@ -180,19 +175,23 @@ python test_search_debug.py
 ### **Global State Architecture Pattern**
 ```python
 # Global State enables scalable workflows
-from core.workflow_state import get_workflow_state, store_strategy
+from core.workflow_state import get_workflow_state
 
-# Phase 1: Strategy → Global State
-strategy_result = create_search_strategy(query, location, job_description)
-# Returns: {"success": True, "strategy_id": "workflow_123"} (lightweight)
-
-# Phase 2: Search → Global State  
+# Phase 1: Search → Global State  
 search_result = smart_candidate_search(query, location, target_count=10)
 # Returns: {"success": True, "candidates_found": 25} (lightweight)
 
-# Phase 3: Extract → Global State
+# Phase 2: Extract → Global State
 extract_result = extract_candidate_profiles()
 # Returns: {"success": True, "extracted_count": 25} (lightweight)
+
+# Phase 3: Evaluate → Global State
+eval_result = evaluate_candidates_quality()
+# Returns: {"success": True, "quality_sufficient": True} (lightweight)
+
+# Phase 4: Outreach → Global State
+outreach_result = generate_candidate_outreach()
+# Returns: {"success": True, "messages_generated": 10} (lightweight)
 
 # All data flows through Global State - no large parameters!
 ```
@@ -514,3 +513,75 @@ This is a production-ready system with comprehensive error handling, modern arch
 ```bash
 HEADLESS_MODE=true linkedin-agent --query "Your Dream Role" --limit 10
 ```
+
+## 🏗️ Architecture Overview
+
+```mermaid
+graph TB
+    subgraph "Entry Point"
+        CLI[main.py CLI]
+    end
+
+    subgraph "Core Components"
+        WM[WorkflowManager]
+        LA[LinkedInAgent<br/>AdalFlow wrapper]
+        GS[Global WorkflowState]
+    end
+
+    subgraph "Configuration Layer"
+        AC[AgentConfig]
+        CDC[CDPConfig]
+        UC[UserConfig]
+        RP[RolePrompts]
+    end
+
+    subgraph "12+ Tool Classes"
+        AUTH[Auth Tools<br/>- CheckAuthTool<br/>- NavigateLinkedInTool<br/>- PromptLoginTool]
+        SEARCH[Search Tools<br/>- SmartCandidateSearchTool<br/>- PeopleSearchTool<br/>- GetCollectedCandidatesTool]
+        EXTRACT[Extraction Tools<br/>- ExtractCandidateProfilesTool<br/>- ProfileExtractorTool<br/>- TargetedExtractionTool]
+        EVAL[Evaluation Tools<br/>- CandidateEvaluationTool<br/>- CandidateScorerTool]
+        OUT[Outreach Tools<br/>- CandidateOutreachGenerationTool<br/>- SaveOutreachResultsTool]
+    end
+
+    subgraph "Vendor Dependencies"
+        CLAUDE[claude_web browser]
+        ADALFLOW[AdalFlow Agent/Runner]
+        MLFLOW[MLflow tracing]
+    end
+
+    subgraph "Storage & Output"
+        RS[ResultSaver]
+        LOG[Custom Logger with phases]
+        STREAM[StreamingHandler<br/>ProgressTracker]
+    end
+
+    CLI --> WM
+    WM --> LA
+    WM --> GS
+    LA --> ADALFLOW
+    LA --> AUTH & SEARCH & EXTRACT & EVAL & OUT
+    
+    WM -.-> AC & CDC & UC
+    WM --> RP
+    WM --> RS
+    WM --> STREAM
+    
+    AUTH & SEARCH & EXTRACT --> CLAUDE
+    GS -.-> |Global State| AUTH & SEARCH & EXTRACT & EVAL & OUT
+    
+    ADALFLOW --> MLFLOW
+    WM & LA & GS --> LOG
+
+    style CLI fill:#f9f,stroke:#333,stroke-width:4px
+    style GS fill:#faa,stroke:#333,stroke-width:2px
+    style LA fill:#aaf,stroke:#333,stroke-width:2px
+```
+
+**Architecture Notes:**
+- **12+ tool classes** for LinkedIn automation tasks (strategy removed as redundant)
+- **Global state management** (`WorkflowState`) for data persistence across phases
+- **Multiple abstraction layers** (Agent → Runner → WorkflowManager)
+- **Redundant tools** with overlapping functionality (multiple search and extraction variants)
+- **Complex logging system** with phases, contexts, and custom handlers
+- **Vendor dependencies** including AdalFlow framework and MLflow tracing
+- **Config sprawl** across multiple configuration classes

@@ -388,6 +388,84 @@ class QualityAnalyzer:
             
         return strengths, concerns
     
+    def assess_candidate_quality_simple(self, candidate_data: Dict[str, Any], 
+                                       query: str,
+                                       min_score_threshold: float) -> CandidateQuality:
+        """Simple quality assessment based on query matching without strategy"""
+        
+        # Extract key data
+        name = candidate_data.get('name', '')
+        headline = candidate_data.get('headline', '').lower()
+        url = candidate_data.get('url', '')
+        query_lower = query.lower()
+        
+        # Simple scoring based on role description instructions
+        score = 5.0  # Start with base score of 5 (everyone is potentially valuable)
+        strengths = []
+        
+        # Parse query for key terms (e.g., "Backend Engineer" -> ["backend", "engineer"])
+        query_terms = query_lower.split()
+        
+        # Check for role-related matches (more flexible matching)
+        role_match_found = False
+        for term in query_terms:
+            if len(term) > 3 and term in headline:  # Skip short words like "at", "in"
+                if not role_match_found:
+                    score += 3.0
+                    role_match_found = True
+                    strengths.append(f"role_match: {term}")
+        
+        # Also check for common role variations
+        if "engineer" in query_lower and "engineer" in headline:
+            if not role_match_found:
+                score += 3.0
+                strengths.append("engineer_role")
+        elif "developer" in query_lower and ("developer" in headline or "engineer" in headline):
+            if not role_match_found:
+                score += 3.0
+                strengths.append("developer_role")
+        
+        # Check for seniority indicators
+        seniority_keywords = ["senior", "lead", "principal", "staff", "manager", "director", "sr", "architect"]
+        if any(keyword in headline for keyword in seniority_keywords):
+            score += 1.5
+            strengths.append("seniority_indicated")
+        
+        # Check for top-tier companies
+        top_companies = ["google", "meta", "facebook", "amazon", "apple", "microsoft", "netflix", "uber", "airbnb", "stripe"]
+        if any(company in headline for company in top_companies):
+            score += 2.0
+            strengths.append("top_tier_company")
+        
+        # Check for technical keywords (for engineering roles)
+        if "engineer" in query_lower or "developer" in query_lower or "backend" in query_lower:
+            tech_keywords = ["python", "java", "react", "node", "aws", "kubernetes", "docker", "sql", 
+                           "javascript", "typescript", "golang", "ruby", "rails", "django", "spring",
+                           "microservices", "api", "rest", "graphql", "cloud", "devops"]
+            matching_tech = [tech for tech in tech_keywords if tech in headline]
+            if matching_tech:
+                score += min(0.5 * len(matching_tech), 2.0)  # Cap tech bonus at 2.0
+                strengths.append(f"tech_stack: {', '.join(matching_tech[:3])}")
+        
+        # Profile completeness bonus (everyone has a profile on LinkedIn)
+        score += 0.5  # Small bonus for having a LinkedIn profile
+        
+        # Ensure minimum reasonable score for any candidate
+        score = max(score, 3.0)  # No one should score below 3.0
+        
+        return CandidateQuality(
+            overall_score=min(score, 10.0),  # Cap at 10
+            technical_score=score * 0.4,
+            experience_score=score * 0.4,
+            cultural_fit_score=score * 0.2,
+            strengths=strengths if strengths else ["linkedin_profile"],
+            concerns=[] if score >= min_score_threshold else ["below_threshold"],
+            key_signals={"query_match": role_match_found},
+            extraction_quality=1.0,
+            profile_completeness=0.5,  # Default to 50% since we only have headline
+            timestamp=datetime.now().isoformat()
+        )
+    
     def assess_candidate_quality_integrated(self, candidate_data: Dict[str, Any], 
                                           strategy: Dict[str, Any],
                                           min_score_threshold: float) -> CandidateQuality:

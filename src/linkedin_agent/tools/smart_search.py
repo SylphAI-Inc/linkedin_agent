@@ -99,7 +99,9 @@ def smart_candidate_search(
     get_heap_backup: bool = False,  # NEW: Access backup candidates from previous search
     backup_offset: int = 0,         # NEW: Start position in heap for backup candidates  
     backup_limit: Optional[int] = None,  # NEW: Number of backup candidates to return
-    expand_scope: bool = False      # NEW: Expand search scope
+    expand_scope: bool = False,     # NEW: Expand search scope
+    network_filter: str = "F",        # NEW: Network filter - "F" for 1st degree, "S" for 2nd, "O" for 3rd+, "" for all,
+    **kwargs
 ) -> Dict[str, Any]:
     """
     Smart search for quality candidates using global state architecture
@@ -116,6 +118,7 @@ def smart_candidate_search(
         backup_offset: Starting position in heap for backup candidates (allows getting candidates beyond top results)
         backup_limit: Maximum number of backup candidates to return
         expand_scope: If True, expand search scope for more candidates
+        network_filter: Network connection filter - "F" for 1st degree (default), "S" for 2nd, "O" for 3rd+, "" for all
         
     Returns:
         Lightweight status dict: {success: True, candidates_found: 10}
@@ -134,16 +137,27 @@ def smart_candidate_search(
     if quality_mode is None:
         quality_mode = search_config.quality_mode
     
-    # Get strategy from global state (automatically available)
+    # Get strategy from global state (now optional - can work without it)
     strategy = get_strategy_for_search()
-    if not strategy:
-        return {
-            "success": False,
-            "error": "No strategy found in global state. Run create_search_strategy first.",
-            "candidates_found": 0
+    if strategy:
+        log_info(f"🔄 Strategy retrieved from global state: {strategy.get('original_query', 'Unknown query')}", phase="SEARCH")
+    else:
+        log_info(f"🔄 No strategy found, using direct search with query: {query}", phase="SEARCH")
+        # Create a simple fallback strategy based on the query
+        strategy = {
+            "original_query": query,
+            "headline_analysis": {
+                "target_job_titles": [query],
+                "alternative_titles": [],
+                "seniority_keywords": ["senior", "lead", "principal", "staff"],
+                "company_indicators": [],
+                "tech_stack_signals": []
+            },
+            "search_filtering": {
+                "minimum_headline_score": 2.0,
+                "negative_headline_patterns": []
+            }
         }
-    
-    log_info(f"🔄 Strategy retrieved from global state: {strategy.get('original_query', 'Unknown query')}", phase="SEARCH")
     
     # NEW: Handle heap backup mode - return candidates from existing collector
     if get_heap_backup:
@@ -210,6 +224,15 @@ def smart_candidate_search(
     
     log_info(f"🔍 Quality-driven search: '{query}' in {location}", phase="SEARCH")
     log_info(f"📊 Quality mode: {quality_mode}, Target: {target_candidate_count or 'adaptive'}", phase="SEARCH")
+    
+    # Log network filter setting
+    network_filter_desc = {
+        "F": "1st degree connections only",
+        "S": "2nd degree connections only", 
+        "O": "3rd+ degree connections only",
+        "": "All connections"
+    }.get(network_filter, f"Unknown filter: {network_filter}")
+    log_info(f"🔗 Network filter: {network_filter_desc}", phase="SEARCH")
     log_debug(f"🗂️  Heap size: {effective_heap_size} (buffer: {heap_buffer_multiplier}x for flexibility)", phase="SEARCH")
     log_debug(f"📊 Quality thresholds: min={thresholds.minimum_acceptable}, target={thresholds.target_quality}", phase="SEARCH")
     log_debug(f"📄 Page budget: {budget.initial_page_limit} → {budget.max_page_limit} (adaptive)", phase="SEARCH")
@@ -235,12 +258,26 @@ def smart_candidate_search(
         while page < budget.max_page_limit:
             log_info(f"📖 Searching page {page + 1} (max: {budget.max_page_limit})")
 
-            # Navigate to search page with proper pagination
+            # Navigate to search page with proper pagination and network filter
             if page == 0:
                 search_url = f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(search_query)}"
+                # Add network filter for 1st degree connections
+                if network_filter == "F":
+                    search_url += "&network=%5B%22F%22%5D"
+                elif network_filter == "S":
+                    search_url += "&network=%5B%22S%22%5D"
+                elif network_filter == "O":
+                    search_url += "&network=%5B%22O%22%5D"
             else:
                 # LinkedIn uses &page= parameter for pagination, not &start=
                 search_url = f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(search_query)}&page={page + 1}"
+                # Add network filter for subsequent pages
+                if network_filter == "F":
+                    search_url += "&network=%5B%22F%22%5D"
+                elif network_filter == "S":
+                    search_url += "&network=%5B%22S%22%5D"
+                elif network_filter == "O":
+                    search_url += "&network=%5B%22O%22%5D"
             
             log_info(f"🌐 Navigating to: {search_url}")
             nav_go(search_url)
@@ -275,7 +312,12 @@ def smart_candidate_search(
                 candidates_evaluated += 1
                 
                 # Do headline scoring + comprehensive quality assessment in one step
-                quality = quality_analyzer.assess_candidate_quality_integrated(raw_candidate, strategy, min_score_threshold)
+                # Pass query as context if no strategy exists
+                if not strategy or strategy.get("original_query") == query:
+                    # Use simplified scoring based on query match
+                    quality = quality_analyzer.assess_candidate_quality_simple(raw_candidate, query, min_score_threshold)
+                else:
+                    quality = quality_analyzer.assess_candidate_quality_integrated(raw_candidate, strategy, min_score_threshold)
                 
                 # Add to heap if quality is sufficient
                 added, reason = candidate_heap.add_candidate(raw_candidate, quality)
