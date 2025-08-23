@@ -8,7 +8,7 @@ packages = [{include = "linkedin_agent", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-adalflow = "^1.1.0"
+adalflow = {path = "/Users/li/github/SylphAI-Inc/adal/backend/AdalFlow/adalflow", develop = true}
 python-dotenv = "^1.0.1"
 websocket-client = "^1.8.0"
 requests = "^2.32.3"

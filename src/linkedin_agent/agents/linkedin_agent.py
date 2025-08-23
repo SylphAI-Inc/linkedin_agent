@@ -7,8 +7,8 @@ from adalflow.components.model_client.openai_client import OpenAIClient
 from adalflow.core.func_tool import FunctionTool
 
 from ..config import AgentConfig, get_model_kwargs
-from ..tools.linkedin_auth import CheckAuthTool, NavigateLinkedInTool, PromptLoginTool
-from ..tools.smart_search import SmartCandidateSearchTool, GetCollectedCandidatesTool
+# from ..tools.linkedin_auth import CheckAuthTool, NavigateLinkedInTool, PromptLoginTool
+from ..tools.smart_search import SmartCandidateSearchTool
 from ..tools.targeted_extraction import ExtractCandidateProfilesTool
 from ..tools.candidate_evaluation import CandidateEvaluationTool
 from ..tools.candidate_outreach import (
@@ -42,13 +42,12 @@ class LinkedInAgent:
         # Prepare default tools if none provided
         self.tools = [
             # LinkedIn authentication and navigation
-            CheckAuthTool,
-            NavigateLinkedInTool, 
-            PromptLoginTool,
+            # CheckAuthTool,
+            # NavigateLinkedInTool, 
+            # PromptLoginTool,
             # Simplified 4-step workflow (strategy removed as redundant)
             SmartCandidateSearchTool,  # 1. Smart candidate discovery with quality scoring
-            GetCollectedCandidatesTool,  # 1b. Access heap backup candidates (used in fallback)
-            ExtractCandidateProfilesTool,  # 2. Extract detailed profiles from candidate heap
+            ExtractCandidateProfilesTool,  # 2. Extract detailed profiles from search results
             CandidateEvaluationTool,  # 3. Comprehensive quality evaluation with fallback recommendations
             CandidateOutreachGenerationTool,  # 4. Generate personalized outreach messages
             # Legacy tools (used by workflow manager for backwards compatibility)
@@ -77,10 +76,4 @@ class LinkedInAgent:
 
     async def acall(self, query: str, context: Optional[Dict[str, Any]] = None) -> Any:
         return await self.runner.acall(prompt_kwargs={"input_str": query})
-
-    def add_tool(self, tool: FunctionTool) -> None:
-        # Note: Tools are now included during agent initialization
-        # This method kept for compatibility but no longer needed for strategy binding
-        self.tools.append(tool)
-        log_error(f"  Tool {getattr(tool.fn, '__name__', 'tool')} added to wrapper (agent already initialized with all tools)", phase="warning")
     

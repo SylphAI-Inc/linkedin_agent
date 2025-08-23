@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
-Phase 1: Quality-Driven Adaptive Search System
+Simplified LLM-based Quality Assessment System
 
 Core components:
-- Quality thresholds and scoring
-- Adaptive search budget
-- Intelligent search extension
-- Heap-based candidate ranking
+- LLM-powered candidate quality scoring
+- Simple dataclasses for quality representation
+- Heap-based candidate ranking (kept from original)
 """
 
 from typing import Dict, Any, List, Optional
@@ -14,6 +13,91 @@ from dataclasses import dataclass
 from datetime import datetime
 import heapq
 import statistics
+import json
+
+# AdalFlow imports for LLM generator
+from adalflow.core import Generator
+from adalflow.components.model_client import OpenAIClient
+from adalflow.components.output_parsers.outputs import JsonOutputParserPydanticModel
+from pydantic import BaseModel, Field
+from ..config import get_model_kwargs
+class KeySignals(BaseModel):
+    """Key assessment signals and indicators"""
+    role_match: bool = Field(description="Whether the candidate's role matches the target role")
+    seniority_appropriate: bool = Field(description="Whether the seniority level is appropriate")
+    tech_stack_match: float = Field(description="Technology stack alignment score (0.0-1.0)")
+    company_tier: str = Field(description="Company tier classification (tier_1, tier_2, tier_3)")
+
+
+class CandidateAssessment(BaseModel):
+    """Comprehensive candidate quality assessment result"""
+    overall_score: float = Field(description="Overall candidate quality score (0.0-10.0)")
+    technical_score: float = Field(description="Technical skills and expertise score (0.0-10.0)")
+    experience_score: float = Field(description="Experience level and career progression score (0.0-10.0)")
+    cultural_fit_score: float = Field(description="Likely cultural and team fit score (0.0-10.0)")
+    extraction_quality: float = Field(description="Quality of available profile data (0.0-10.0)")
+    profile_completeness: float = Field(description="Profile data completeness percentage (0.0-100.0)")
+    
+    strengths: List[str] = Field(description="List of candidate strengths and positive indicators")
+    concerns: List[str] = Field(description="List of concerns or potential issues")
+    key_signals: KeySignals = Field(description="Key assessment signals and indicators")
+    reasoning: str = Field(description="Detailed explanation of the assessment")
+
+
+# LLM prompt template for candidate quality assessment
+QUALITY_ASSESSMENT_PROMPT = r"""<ROLE>
+You are an expert technical recruiter evaluating LinkedIn candidates. Your task is to assess candidate quality based on their profile information and job requirements.
+</ROLE>
+
+<CONTEXT>
+You are evaluating a candidate for the following position:
+Role: {{role_query}}
+Job Requirements: {{job_requirements}}
+
+Candidate Information:
+- Name: {{candidate_name}}
+- Headline: {{candidate_headline}}
+- Profile URL: {{candidate_url}}
+{% if profile_data %}
+- Full Profile Data: {{profile_data}}
+{% endif %}
+</CONTEXT>
+
+<TASK>
+Evaluate this candidate's quality on a scale of 0-10 and provide detailed reasoning.
+
+Consider:
+1. Technical Skills Match: How well do their skills align with the role?
+2. Experience Level: Is their seniority appropriate for the position?
+3. Career Progression: Do they show growth and advancement?
+4. Company Background: Have they worked at reputable companies?
+5. Role Relevance: How relevant is their experience to this specific role?
+
+Provide scores for:
+- overall_score (0-10): Overall candidate quality
+- technical_score (0-10): Technical skills and expertise
+- experience_score (0-10): Experience level and career progression
+- cultural_fit_score (0-10): Likely cultural and team fit
+- extraction_quality (0-10): Quality of available profile data
+</TASK>
+
+<OUTPUT_FORMAT>
+{{output_format_str}}
+</OUTPUT_FORMAT>
+
+<EXAMPLES>
+For a "Senior Backend Engineer" role:
+- High technical_score for candidates with relevant backend technologies
+- High experience_score for 5+ years experience with senior titles
+- Consider company quality (FAANG = higher scores)
+- Look for leadership indicators in senior roles
+
+For a "Product Manager" role:
+- Focus on strategic thinking and cross-functional experience
+- Value MBA or product-specific experience
+- Consider B2B/B2C alignment with role requirements
+</EXAMPLES>
+"""
 
 
 @dataclass
@@ -42,23 +126,8 @@ class SearchBudget:
     min_heap_capacity_pct: float = 50.0  # Minimum heap capacity utilization before extraction
     
 
-@dataclass
-class CandidateQuality:
-    """Comprehensive candidate quality assessment"""
-    overall_score: float
-    technical_score: float
-    experience_score: float  
-    cultural_fit_score: float
-    
-    # Quality explanation
-    strengths: List[str]
-    concerns: List[str]
-    key_signals: Dict[str, Any]
-    
-    # Metadata
-    extraction_quality: float  # How good was the data extraction?
-    profile_completeness: float
-    timestamp: str
+# CandidateAssessment Pydantic model is used instead of CandidateQuality dataclass
+# They represent the same structure - unified for consistency
 
 
 class CandidateHeap:
@@ -70,7 +139,7 @@ class CandidateHeap:
         self.heap = []  # Min-heap (lowest scores first)
         self.seen_urls = set()  # Deduplication
         
-    def add_candidate(self, candidate_data: Dict[str, Any], quality: CandidateQuality):
+    def add_candidate(self, candidate_data: Dict[str, Any], quality: CandidateAssessment):
         """Add candidate if quality is good enough, maintaining heap size"""
         url = candidate_data.get('url', '')
         
@@ -216,572 +285,111 @@ class CandidateHeap:
         return True, f"ready_quality_{avg_quality:.1f}_capacity_{capacity_utilization:.1f}pct"
 
 
+class QualityGenerator:
+    """LLM-powered quality assessment generator using AdalFlow"""
+    
+    def __init__(self):
+        self.client = OpenAIClient()
+        self.parser = JsonOutputParserPydanticModel(pydantic_model=CandidateAssessment)
+        
+        # Generator for quality assessment
+        self.generator = Generator(
+            model_client=self.client,
+            model_kwargs=get_model_kwargs(),
+            template=QUALITY_ASSESSMENT_PROMPT,
+            prompt_kwargs={
+                "output_format_str": self.parser.format_instructions()
+            },
+            output_processors=self.parser
+        )
+    
+    def assess_candidate_quality_llm(self, 
+                                   candidate_data: Dict[str, Any], 
+                                   role_query: str,
+                                   job_requirements: str = "") -> CandidateAssessment:
+        """Use LLM to assess candidate quality"""
+        
+        # Extract candidate information
+        name = candidate_data.get('name', 'Unknown')
+        headline = candidate_data.get('headline', '')
+        url = candidate_data.get('url', '')
+        profile_data = candidate_data.get('profile_data', {})
+        
+        try:
+            # Call LLM for quality assessment
+            result = self.generator(prompt_kwargs={
+                "role_query": role_query,
+                "job_requirements": job_requirements,
+                "candidate_name": name,
+                "candidate_headline": headline,
+                "candidate_url": url,
+                "profile_data": json.dumps(profile_data) if profile_data else None
+            })
+            
+            if hasattr(result, 'data') and result.data:
+                llm_assessment = result.data
+
+                return llm_assessment
+            else:
+                # Fallback if LLM fails
+                return self._create_fallback_quality(candidate_data, role_query)
+                
+        except Exception as e:
+            print(f"LLM quality assessment failed: {e}")
+            return self._create_fallback_quality(candidate_data, role_query)
+    
+    def _create_fallback_quality(self, candidate_data: Dict[str, Any], role_query: str) -> CandidateAssessment:
+        """Simple fallback quality assessment when LLM fails"""
+        headline = candidate_data.get('headline', '').lower()
+        role_lower = role_query.lower()
+        
+        # Simple keyword matching
+        base_score = 5.0
+        if any(word in headline for word in role_lower.split()):
+            base_score += 2.0
+        if any(word in headline for word in ['senior', 'lead', 'principal']):
+            base_score += 1.0
+
+        return CandidateAssessment(
+            overall_score=min(base_score, 10.0),
+            technical_score=base_score * 0.8,
+            experience_score=base_score * 0.9,
+            cultural_fit_score=5.0,
+            strengths=["Profile available"],
+            concerns=["LLM assessment unavailable"],
+            key_signals=KeySignals(
+                role_match=any(word in headline for word in role_lower.split()),
+                seniority_appropriate=any(word in headline for word in ['senior', 'lead', 'principal']),
+                tech_stack_match=0.5,  # Default middle value for fallback
+                company_tier="unknown"
+            ),
+            extraction_quality=7.0 if candidate_data.get('name') and candidate_data.get('headline') else 3.0,
+            profile_completeness=50.0,
+            reasoning="Fallback assessment based on headline keywords"
+        )
+
+
+
 class QualityAnalyzer:
-    """Analyze candidate quality and make search decisions"""
+    """Simplified quality analyzer using LLM-based assessment"""
     
     def __init__(self, thresholds: QualityThresholds, budget: SearchBudget):
         self.thresholds = thresholds
         self.budget = budget
         self.quality_history = []  # Track quality over time
+        self.quality_generator = QualityGenerator()  # LLM-powered assessment
         
     def assess_candidate_quality(self, candidate_data: Dict[str, Any], 
-                                headline_score: float) -> CandidateQuality:
-        """Comprehensive quality assessment of a candidate"""
+                                role_query: str = "Software Engineer",
+                                job_requirements: str = "") -> CandidateAssessment:
+        """LLM-powered quality assessment of a candidate"""
         
-        # Extract key data
-        name = candidate_data.get('name', '')
-        headline = candidate_data.get('headline', '')
-        profile_data = candidate_data.get('profile_data', {})
-        
-        # Calculate component scores
-        technical_score = self._assess_technical_quality(headline, profile_data, headline_score)
-        experience_score = self._assess_experience_quality(profile_data)
-        cultural_fit_score = self._assess_cultural_fit(headline, profile_data)
-        extraction_quality = self._assess_extraction_quality(candidate_data)
-        
-        # Overall score (weighted average)
-        overall_score = (
-            technical_score * 0.35 +
-            experience_score * 0.35 + 
-            cultural_fit_score * 0.20 +
-            extraction_quality * 0.10
+        # Use LLM generator for assessment
+        return self.quality_generator.assess_candidate_quality_llm(
+            candidate_data=candidate_data,
+            role_query=role_query,
+            job_requirements=job_requirements
         )
-        
-        # Generate explanations
-        strengths, concerns = self._generate_quality_explanations(
-            technical_score, experience_score, cultural_fit_score, headline, profile_data
-        )
-        
-        return CandidateQuality(
-            overall_score=round(overall_score, 2),
-            technical_score=round(technical_score, 2),
-            experience_score=round(experience_score, 2),
-            cultural_fit_score=round(cultural_fit_score, 2),
-            strengths=strengths,
-            concerns=concerns,
-            key_signals={
-                "headline_score": headline_score,
-                "has_profile_data": bool(profile_data),
-                "profile_completeness": len(profile_data.keys()) if profile_data else 0
-            },
-            extraction_quality=round(extraction_quality, 2),
-            profile_completeness=self._calculate_profile_completeness(profile_data),
-            timestamp=datetime.now().isoformat()
-        )
-    
-    def _assess_technical_quality(self, headline: str, profile_data: Dict[str, Any], 
-                                 headline_score: float) -> float:
-        """Assess technical competency indicators"""
-        score = headline_score  # Base score from headline analysis
-        
-        if profile_data:
-            # Boost for detailed experience
-            experiences = profile_data.get('experiences', [])
-            if len(experiences) >= 3:
-                score += 1.0
-                
-            # Boost for education
-            education = profile_data.get('education', [])
-            if education:
-                score += 0.5
-                
-            # Boost for skills
-            skills = profile_data.get('skills', [])
-            if len(skills) >= 10:
-                score += 1.0
-                
-        return min(score, 10.0)  # Cap at 10
-    
-    def _assess_experience_quality(self, profile_data: Dict[str, Any]) -> float:
-        """Assess experience depth and progression"""
-        if not profile_data:
-            return 3.0  # Neutral score for missing data
-            
-        score = 5.0  # Base score
-        
-        experiences = profile_data.get('experiences', [])
-        
-        # Experience quantity
-        if len(experiences) >= 3:
-            score += 1.5
-        elif len(experiences) >= 2:
-            score += 1.0
-            
-        # Look for progression indicators
-        for exp in experiences[:3]:  # Check recent experience
-            title = exp.get('title', '').lower()
-            if any(word in title for word in ['senior', 'lead', 'staff', 'principal', 'architect']):
-                score += 1.0
-                break
-                
-        return min(score, 10.0)
-    
-    def _assess_cultural_fit(self, headline: str, profile_data: Dict[str, Any]) -> float:
-        """Assess cultural fit indicators"""
-        score = 5.0  # Neutral base
-        
-        # Communication quality (from profile completeness)
-        if profile_data and profile_data.get('about'):
-            score += 1.0
-            
-        # Collaborative indicators
-        headline_lower = headline.lower()
-        if any(word in headline_lower for word in ['team', 'collaboration', 'agile', 'scrum']):
-            score += 0.5
-            
-        return min(score, 10.0)
-    
-    def _assess_extraction_quality(self, candidate_data: Dict[str, Any]) -> float:
-        """How good was our data extraction?"""
-        score = 0.0
-        
-        # Basic fields present
-        if candidate_data.get('name'):
-            score += 2.0
-        if candidate_data.get('headline'):  
-            score += 2.0
-        if candidate_data.get('url'):
-            score += 1.0
-        if candidate_data.get('profile_data'):
-            score += 5.0
-            
-        return min(score, 10.0)
-    
-    def _calculate_profile_completeness(self, profile_data: Dict[str, Any]) -> float:
-        """Calculate how complete the profile data is"""
-        if not profile_data:
-            return 0.0
-            
-        fields = ['experiences', 'education', 'skills', 'about']
-        present_fields = sum(1 for field in fields if profile_data.get(field))
-        
-        return (present_fields / len(fields)) * 100
-    
-    def _generate_quality_explanations(self, tech_score: float, exp_score: float, 
-                                     cultural_score: float, headline: str, 
-                                     profile_data: Dict[str, Any]) -> tuple:
-        """Generate human-readable quality explanations"""
-        strengths = []
-        concerns = []
-        
-        # Technical strengths/concerns
-        if tech_score >= 7:
-            strengths.append("Strong technical background")
-        elif tech_score < 4:
-            concerns.append("Limited technical indicators")
-            
-        # Experience strengths/concerns  
-        if exp_score >= 7:
-            strengths.append("Solid experience progression")
-        elif exp_score < 4:
-            concerns.append("Limited experience information")
-            
-        # Profile completeness
-        if profile_data:
-            experiences = len(profile_data.get('experiences', []))
-            if experiences >= 3:
-                strengths.append(f"{experiences} work experiences listed")
-            elif experiences == 0:
-                concerns.append("No work experience details")
-        else:
-            concerns.append("Profile extraction incomplete")
-            
-        return strengths, concerns
-    
-    def assess_candidate_quality_simple(self, candidate_data: Dict[str, Any], 
-                                       query: str,
-                                       min_score_threshold: float) -> CandidateQuality:
-        """Simple quality assessment based on query matching without strategy"""
-        
-        # Extract key data
-        name = candidate_data.get('name', '')
-        headline = candidate_data.get('headline', '').lower()
-        url = candidate_data.get('url', '')
-        query_lower = query.lower()
-        
-        # Simple scoring based on role description instructions
-        score = 5.0  # Start with base score of 5 (everyone is potentially valuable)
-        strengths = []
-        
-        # Parse query for key terms (e.g., "Backend Engineer" -> ["backend", "engineer"])
-        query_terms = query_lower.split()
-        
-        # Check for role-related matches (more flexible matching)
-        role_match_found = False
-        for term in query_terms:
-            if len(term) > 3 and term in headline:  # Skip short words like "at", "in"
-                if not role_match_found:
-                    score += 3.0
-                    role_match_found = True
-                    strengths.append(f"role_match: {term}")
-        
-        # Also check for common role variations
-        if "engineer" in query_lower and "engineer" in headline:
-            if not role_match_found:
-                score += 3.0
-                strengths.append("engineer_role")
-        elif "developer" in query_lower and ("developer" in headline or "engineer" in headline):
-            if not role_match_found:
-                score += 3.0
-                strengths.append("developer_role")
-        
-        # Check for seniority indicators
-        seniority_keywords = ["senior", "lead", "principal", "staff", "manager", "director", "sr", "architect"]
-        if any(keyword in headline for keyword in seniority_keywords):
-            score += 1.5
-            strengths.append("seniority_indicated")
-        
-        # Check for top-tier companies
-        top_companies = ["google", "meta", "facebook", "amazon", "apple", "microsoft", "netflix", "uber", "airbnb", "stripe"]
-        if any(company in headline for company in top_companies):
-            score += 2.0
-            strengths.append("top_tier_company")
-        
-        # Check for technical keywords (for engineering roles)
-        if "engineer" in query_lower or "developer" in query_lower or "backend" in query_lower:
-            tech_keywords = ["python", "java", "react", "node", "aws", "kubernetes", "docker", "sql", 
-                           "javascript", "typescript", "golang", "ruby", "rails", "django", "spring",
-                           "microservices", "api", "rest", "graphql", "cloud", "devops"]
-            matching_tech = [tech for tech in tech_keywords if tech in headline]
-            if matching_tech:
-                score += min(0.5 * len(matching_tech), 2.0)  # Cap tech bonus at 2.0
-                strengths.append(f"tech_stack: {', '.join(matching_tech[:3])}")
-        
-        # Profile completeness bonus (everyone has a profile on LinkedIn)
-        score += 0.5  # Small bonus for having a LinkedIn profile
-        
-        # Ensure minimum reasonable score for any candidate
-        score = max(score, 3.0)  # No one should score below 3.0
-        
-        return CandidateQuality(
-            overall_score=min(score, 10.0),  # Cap at 10
-            technical_score=score * 0.4,
-            experience_score=score * 0.4,
-            cultural_fit_score=score * 0.2,
-            strengths=strengths if strengths else ["linkedin_profile"],
-            concerns=[] if score >= min_score_threshold else ["below_threshold"],
-            key_signals={"query_match": role_match_found},
-            extraction_quality=1.0,
-            profile_completeness=0.5,  # Default to 50% since we only have headline
-            timestamp=datetime.now().isoformat()
-        )
-    
-    def assess_candidate_quality_integrated(self, candidate_data: Dict[str, Any], 
-                                          strategy: Dict[str, Any],
-                                          min_score_threshold: float) -> CandidateQuality:
-        """Integrated quality assessment: headline scoring + comprehensive quality in one step"""
-        
-        # Extract key data
-        name = candidate_data.get('name', '')
-        headline = candidate_data.get('headline', '')
-        url = candidate_data.get('url', '')
-        
-        # Step 1: Do headline scoring using strategy (replaces old evaluate_headline_with_strategy)
-        headline_score = self._evaluate_headline_with_strategy(headline, strategy)
-        
-        # Step 2: Do comprehensive quality assessment
-        technical_score = self._assess_technical_quality_integrated(headline, headline_score, strategy)
-        experience_score = self._assess_experience_quality_integrated(headline, strategy)
-        cultural_fit_score = self._assess_cultural_fit(headline, {})  # No profile data yet
-        extraction_quality = 8.0 if all([name, headline, url]) else 4.0  # Basic data completeness
-        
-        # Step 3: Apply scoring boosts
-        company_score_boost = self._assess_company_quality_boost(headline, strategy)
-        seniority_score_boost = self._assess_seniority_quality_boost(headline, strategy)
-        
-        # Overall score (weighted average + boosts) - capped at 10.0
-        base_score = (
-            technical_score * 0.35 +
-            experience_score * 0.35 + 
-            cultural_fit_score * 0.20 +
-            extraction_quality * 0.10
-        )
-        overall_score = min(base_score + company_score_boost + seniority_score_boost, 10.0)
-        
-        # Generate explanations (including boost info)
-        strengths, concerns = self._generate_quality_explanations_integrated(
-            technical_score, experience_score, cultural_fit_score, headline, strategy, 
-            company_score_boost, seniority_score_boost
-        )
-        
-        return CandidateQuality(
-            overall_score=round(overall_score, 2),
-            technical_score=round(technical_score, 2),
-            experience_score=round(experience_score, 2),
-            cultural_fit_score=round(cultural_fit_score, 2),
-            strengths=strengths,
-            concerns=concerns,
-            key_signals={
-                "headline_score": headline_score,
-                "company_boost": company_score_boost,
-                "seniority_boost": seniority_score_boost,
-                "base_score": round(base_score, 2),
-                "total_boost": round(company_score_boost + seniority_score_boost, 2),
-                "strategy_format": "agent" if ("primary_titles" in strategy or "primary_job_titles" in strategy) else "fallback",
-                "headline_length": len(headline) if headline else 0
-            },
-            extraction_quality=round(extraction_quality, 2),
-            profile_completeness=0.0,  # No full profile data yet
-            timestamp=datetime.now().isoformat()
-        )
-    
-    def _evaluate_headline_with_strategy(self, headline: str, strategy: Dict[str, Any]) -> float:
-        """Evaluate headline using strategy - integrated version"""
-        if not headline or not strategy:
-            return 0.0
-            
-        headline_lower = headline.lower()
-        score = 0.0
-        
-        # Handle multiple strategy formats: agent format, fallback format, and new agent format
-        if "headline_analysis" in strategy:
-            # Expected format from fallback strategy
-            target_titles = [title.lower() for title in strategy.get("headline_analysis", {}).get("target_job_titles", [])]
-            alternative_titles = [title.lower() for title in strategy.get("headline_analysis", {}).get("alternative_titles", [])]
-            seniority_keywords = [kw.lower() for kw in strategy.get("headline_analysis", {}).get("seniority_keywords", [])]
-            company_indicators = [comp.lower() for comp in strategy.get("headline_analysis", {}).get("company_indicators", [])]
-            tech_signals = [tech.lower() for tech in strategy.get("headline_analysis", {}).get("tech_stack_signals", [])]
-            negative_patterns = [pattern.lower() for pattern in strategy.get("search_filtering", {}).get("negative_headline_patterns", [])]
-        else:
-            # Agent format - handle both old and new field names
-            target_titles = [title.lower() for title in (
-                strategy.get("primary_titles", []) or 
-                strategy.get("primary_job_titles", [])
-            )]
-            alternative_titles = [title.lower() for title in strategy.get("alternative_titles", [])]
-            seniority_keywords = [kw.lower() for kw in strategy.get("seniority_indicators", [])]
-            company_indicators = [comp.lower() for comp in strategy.get("target_companies", [])]
-            tech_signals = [tech.lower() for tech in strategy.get("key_technologies", [])]
-            negative_patterns = [pattern.lower() for pattern in strategy.get("negative_patterns", [])]
-        
-        # Job title relevance
-        if any(title in headline_lower for title in target_titles):
-            score += 3.0
-        elif any(alt in headline_lower for alt in alternative_titles):
-            score += 2.0
-        
-        # Seniority indicators
-        if any(keyword in headline_lower for keyword in seniority_keywords):
-            score += 1.5
-        
-        # Company indicators
-        if any(indicator in headline_lower for indicator in company_indicators):
-            score += 1.0
-        
-        # Tech stack signals
-        matching_tech = [tech for tech in tech_signals if tech in headline_lower]
-        if matching_tech:
-            score += len(matching_tech) * 0.5
-        
-        # Check for negative patterns
-        if any(pattern in headline_lower for pattern in negative_patterns):
-            score -= 2.0
-            
-        return max(score, 0.0)  # Don't go negative
-    
-    def _assess_technical_quality_integrated(self, headline: str, headline_score: float, 
-                                           strategy: Dict[str, Any]) -> float:
-        """Assess technical quality using headline and strategy"""
-        score = headline_score  # Base score from headline analysis
-        
-        # Boost for technical depth indicators in headline
-        headline_lower = headline.lower() if headline else ""
-        
-        # Look for architecture/design keywords
-        if any(word in headline_lower for word in ['architect', 'design', 'lead', 'principal']):
-            score += 1.0
-            
-        # Look for specific tech mentions beyond basic keywords
-        tech_depth_indicators = ['full stack', 'backend', 'frontend', 'devops', 'ml', 'ai']
-        if any(indicator in headline_lower for indicator in tech_depth_indicators):
-            score += 0.5
-            
-        return min(score, 10.0)
-    
-    def _assess_experience_quality_integrated(self, headline: str, strategy: Dict[str, Any]) -> float:
-        """Assess experience quality from headline indicators"""
-        score = 5.0  # Base score
-        headline_lower = headline.lower() if headline else ""
-        
-        # Seniority indicators
-        seniority_words = ['senior', 'lead', 'staff', 'principal', 'director']
-        if any(word in headline_lower for word in seniority_words):
-            score += 2.0
-        elif any(word in headline_lower for word in ['jr', 'junior', 'entry']):
-            score -= 1.0
-            
-        # Company quality indicators (if we recognize the company)
-        company_indicators = strategy.get("target_companies", []) if "target_companies" in strategy else strategy.get("headline_analysis", {}).get("company_indicators", [])
-        if any(comp.lower() in headline_lower for comp in company_indicators):
-            score += 1.0
-            
-        return min(score, 10.0)
-    
-    def _generate_quality_explanations_integrated(self, tech_score: float, exp_score: float, 
-                                                cultural_score: float, headline: str, 
-                                                strategy: Dict[str, Any], company_boost: float = 0.0, 
-                                                seniority_boost: float = 0.0) -> tuple:
-        """Generate human-readable quality explanations for integrated assessment"""
-        strengths = []
-        concerns = []
-        
-        # Technical strengths/concerns
-        if tech_score >= 7:
-            strengths.append("Strong technical indicators in headline")
-        elif tech_score < 4:
-            concerns.append("Limited technical keywords found")
-            
-        # Experience strengths/concerns  
-        if exp_score >= 7:
-            strengths.append("Strong seniority/experience indicators")
-        elif exp_score < 4:
-            concerns.append("Limited experience indicators")
-            
-        # Headline quality
-        if headline and len(headline) > 30:
-            strengths.append("Detailed professional headline")
-        elif not headline or len(headline) < 10:
-            concerns.append("Very brief or missing headline")
-        
-        # Company boost information
-        if company_boost > 0:
-            if company_boost >= 1.5:
-                strengths.append(f"Works at target tier-1 company (+{company_boost:.1f} boost)")
-            elif company_boost >= 1.0:
-                strengths.append(f"Works at target tier-2 company (+{company_boost:.1f} boost)")
-            else:
-                strengths.append(f"Works at target company (+{company_boost:.1f} boost)")
-        
-        # Seniority boost information
-        if seniority_boost > 0:
-            if seniority_boost >= 1.5:
-                strengths.append(f"Senior/leadership role (+{seniority_boost:.1f} boost)")
-            elif seniority_boost >= 1.0:
-                strengths.append(f"Mid-senior level role (+{seniority_boost:.1f} boost)")
-            else:
-                strengths.append(f"Seniority indicators (+{seniority_boost:.1f} boost)")
-            
-        return strengths, concerns
-    
-    def _assess_company_quality_boost(self, headline: str, strategy: Dict[str, Any]) -> float:
-        """Assess company-based quality boost from headline"""
-        if not headline or not strategy:
-            return 0.0
-            
-        headline_lower = headline.lower()
-        boost = 0.0
-        
-        # Extract target companies from strategy
-        target_companies = []
-        if "target_companies" in strategy:
-            target_companies = strategy["target_companies"]
-        elif "headline_analysis" in strategy and "company_indicators" in strategy["headline_analysis"]:
-            target_companies = strategy["headline_analysis"]["company_indicators"]
-        
-        if not target_companies:
-            return 0.0
-            
-        # Define company tiers with different boost values
-        tier_1_companies = ["google", "facebook", "meta", "apple", "microsoft", "amazon", "netflix", "tesla", "uber", "airbnb"]
-        tier_2_companies = ["stripe", "dropbox", "slack", "salesforce", "adobe", "nvidia", "twitter", "linkedin", "pinterest", "square"]
-        
-        # Check for exact company mentions in headline
-        for company in target_companies:
-            company_lower = company.lower()
-            
-            # Look for company name in headline (with word boundaries)
-            import re
-            if re.search(r'\b' + re.escape(company_lower) + r'\b', headline_lower):
-                # Tier-based scoring
-                if company_lower in tier_1_companies:
-                    boost += 1.5  # Big boost for top tier companies
-                elif company_lower in tier_2_companies:
-                    boost += 1.0  # Medium boost for tier 2 companies
-                else:
-                    boost += 0.75  # Standard boost for target companies
-                    
-                # Additional boost if they explicitly mention working "at" the company
-                if f" at {company_lower}" in headline_lower or f"@{company_lower}" in headline_lower:
-                    boost += 0.25
-                    
-                break  # Only apply boost for first matching company
-        
-        return min(boost, 2.0)  # Cap boost at 2.0 points
-    
-    def _assess_seniority_quality_boost(self, headline: str, strategy: Dict[str, Any]) -> float:
-        """Assess seniority-based quality boost from headline using strategy data"""
-        if not headline or not strategy:
-            return 0.0
-            
-        headline_lower = headline.lower()
-        boost = 0.0
-        
-        # Extract seniority indicators from strategy
-        seniority_indicators = []
-        if "seniority_indicators" in strategy:
-            seniority_indicators = [s.lower() for s in strategy["seniority_indicators"]]
-        elif "headline_analysis" in strategy and "seniority_keywords" in strategy["headline_analysis"]:
-            seniority_indicators = [s.lower() for s in strategy["headline_analysis"]["seniority_keywords"]]
-        
-        # Extract primary and alternative titles from strategy  
-        primary_titles = []
-        alternative_titles = []
-        if "headline_analysis" in strategy:
-            # Fallback format
-            primary_titles = [t.lower() for t in strategy.get("headline_analysis", {}).get("target_job_titles", [])]
-            alternative_titles = [t.lower() for t in strategy.get("headline_analysis", {}).get("alternative_titles", [])]
-        else:
-            # Agent format - handle both old and new field names
-            primary_titles = [t.lower() for t in (
-                strategy.get("primary_titles", []) or 
-                strategy.get("primary_job_titles", [])
-            )]
-            alternative_titles = [t.lower() for t in strategy.get("alternative_titles", [])]
-        
-        # Categorize seniority levels based on common patterns
-        executive_words = ["cto", "ceo", "vp", "vice president", "director", "head of", "chief"]
-        principal_words = ["principal", "staff", "architect", "distinguished"] 
-        senior_words = ["senior", "lead", "sr.", "sr ", "team lead", "tech lead", "technical lead"]
-        
-        # Check for seniority match in strategy indicators
-        matched_seniority = [s for s in seniority_indicators if s in headline_lower]
-        
-        if matched_seniority:
-            # Determine boost level based on matched seniority terms
-            for term in matched_seniority:
-                if any(exec_word in term for exec_word in executive_words):
-                    boost = max(boost, 2.0)  # Executive level
-                elif any(prin_word in term for prin_word in principal_words):
-                    boost = max(boost, 1.8)  # Principal/Staff level
-                elif any(sr_word in term for sr_word in senior_words):
-                    boost = max(boost, 1.5)  # Senior level
-                else:
-                    boost = max(boost, 1.0)  # General seniority indicator
-        
-        # Check for title relevance boost
-        title_relevance_boost = 0.0
-        if any(title in headline_lower for title in primary_titles):
-            title_relevance_boost = 0.5  # Boost for exact primary title match
-        elif any(title in headline_lower for title in alternative_titles):
-            title_relevance_boost = 0.3  # Smaller boost for alternative title
-            
-        # Extract key technologies from strategy for additional context
-        key_technologies = []
-        if "key_technologies" in strategy:
-            key_technologies = [t.lower() for t in strategy["key_technologies"]]
-        elif "headline_analysis" in strategy and "tech_stack_signals" in strategy["headline_analysis"]:
-            key_technologies = [t.lower() for t in strategy["headline_analysis"]["tech_stack_signals"]]
-        
-        # Additional context boosts based on strategy
-        context_boost = 0.0
-        if boost > 0 and key_technologies:
-            # Boost for mentioning strategy-relevant technologies
-            tech_matches = [tech for tech in key_technologies if tech in headline_lower]
-            if tech_matches:
-                context_boost = min(len(tech_matches) * 0.1, 0.3)  # Max 0.3 boost
-        
-        total_boost = boost + title_relevance_boost + context_boost
-        return min(total_boost, 2.0)  # Cap total boost at 2.0 points
     
     def should_extend_search(self, current_stats: Dict[str, float], 
                            pages_searched: int) -> tuple:
@@ -800,6 +408,24 @@ class QualityAnalyzer:
             return True, f"insufficient_candidates_{current_stats['count']}"
             
         return False, "quality_sufficient"
+    
+    def detect_quality_plateau(self, recent_scores: List[float]) -> bool:
+        """Detect if quality has plateaued (no improvement)"""
+        if len(recent_scores) < self.thresholds.plateau_window:
+            return False
+            
+        recent_window = recent_scores[-self.thresholds.plateau_window:]
+        first_half = recent_window[:len(recent_window)//2]
+        second_half = recent_window[len(recent_window)//2:]
+        
+        if not first_half or not second_half:
+            return False
+            
+        first_avg = statistics.mean(first_half)
+        second_avg = statistics.mean(second_half)
+        
+        improvement = second_avg - first_avg
+        return improvement < self.thresholds.plateau_improvement_threshold
     
     def detect_quality_plateau(self, recent_scores: List[float]) -> bool:
         """Detect if quality has plateaued (no improvement)"""

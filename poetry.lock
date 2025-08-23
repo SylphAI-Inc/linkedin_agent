@@ -2,47 +2,53 @@
 
 [[package]]
 name = "adalflow"
-version = "1.1.0"
+version = "1.1.1"
 description = "The Library to Build and Auto-optimize LLM Applications"
 optional = false
-python-versions = "<4.0,>=3.9"
+python-versions = ">=3.9, <4.0"
 groups = ["main"]
-files = [
-    {file = "adalflow-1.1.0-py3-none-any.whl", hash = "sha256:9572757dc5112c5c9af8c924e5d63cce1414fff5e5f6ab87e8f5493d817bb41c"},
-    {file = "adalflow-1.1.0.tar.gz", hash = "sha256:7140e1d0c10419307b04e23b0f19e6b675774e77e30af014d275fc1ff054f141"},
-]
+files = []
+develop = true
 
 [package.dependencies]
-asyncstdlib = ">=3.13.1,<4.0.0"
-backoff = ">=2.2.1,<3.0.0"
-colorama = ">=0.4.6,<0.5.0"
-diskcache = ">=5.6.3,<6.0.0"
-jinja2 = ">=3.1.3,<4.0.0"
-jsonlines = ">=4.0.0,<5.0.0"
-nest-asyncio = ">=1.6.0,<2.0.0"
+asyncstdlib = "^3.13.1"
+backoff = "^2.2.1"
+colorama = "^0.4.6"
+diskcache = "^5.6.3"
+jinja2 = "^3.1.3"
+jsonlines = "^4.0.0"
+nest-asyncio = "^1.6.0"
 numpy = {version = "*", markers = "python_version >= \"3.10\""}
-pytest-asyncio = ">=1.0.0,<2.0.0"
-python-dotenv = ">=1.0.1,<2.0.0"
+pydantic = ">=2.0.0"
+pytest-asyncio = "^1.0.0"
+python-dotenv = "^1.0.1"
 PyYAML = ">=6.0.1"
 tiktoken = ">=0.3.3"
-tqdm = ">=4.66.4,<5.0.0"
+tqdm = "^4.66.4"
 
 [package.extras]
 anthropic = ["anthropic (>=0.55.0)"]
 azure = ["azure-core (>=1.24.0)", "azure-identity (>=1.12.0)"]
 bedrock = ["boto3 (>=1.35.19,<2.0.0)"]
 cohere = ["cohere (>=5.5.8)"]
+datasets = []
 faiss-cpu = ["faiss-cpu (>=1.8.0)"]
+fireworks-ai = []
 google-generativeai = ["google-generativeai (>=0.7.2)"]
 groq = ["groq (>=0.9.0)"]
 lancedb = ["lancedb (>=0.5.2)"]
 mcp = ["mcp (>=1.9.4,<2.0.0) ; python_version >= \"3.10\""]
+mistralai = []
 ollama = ["ollama (>=0.2.1)"]
 openai = ["openai (>=1.97.1)"]
 pgvector = ["pgvector (>=0.3.1)"]
 sqlalchemy = ["sqlalchemy (>=2.0.30)"]
 together = ["together (>=1.3.14)"]
 torch = ["torch (>=2.3.1)"]
+
+[package.source]
+type = "directory"
+url = "../adal/backend/AdalFlow/adalflow"
 
 [[package]]
 name = "annotated-types"
@@ -1219,4 +1225,4 @@ test = ["websockets"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "c6ec651ce6ae65b72204a424648dd3425529345ca8cba0b1dab8791a08e50b98"
+content-hash = "c3f1431d651fb82f31750ad3d342ee7d43d590d8942aee091f432a9c76012724"

@@ -9,7 +9,7 @@ import time
 from adalflow.core.func_tool import FunctionTool
 from .web_nav import go as nav_go, wait as nav_wait
 from .profile_extractor import extract_profile  # Use existing extraction function
-from .smart_search import get_url_collector
+# URL collector removed - using workflow state directly
 from ..core.workflow_state import get_candidates_for_extraction, store_extraction_results
 from ..utils.logger import log_info, log_debug, log_error, log_progress
 
@@ -101,17 +101,17 @@ def extract_candidate_profiles(
             # Extract profile data
             profile_data = extract_profile()
             
-            if validate_extraction:
-                validation_result = _validate_extracted_profile(profile_data, candidate)
-                if validation_result["valid"]:
-                    extraction_stats["validation_passed"] += 1
-                    print(f"   ✅ Extracted and validated: {profile_data.get('name', name)}")
-                else:
-                    extraction_stats["validation_failed"] += 1
-                    print(f"   ⚠️  Extracted but validation issues: {validation_result['issues']}")
-            else:
-                extraction_stats["validation_passed"] += 1
-                print(f"   ✅ Extracted: {profile_data.get('name', name)}")
+            # if validate_extraction:
+            #     validation_result = _validate_extracted_profile(profile_data, candidate)
+            #     if validation_result["valid"]:
+            #         extraction_stats["validation_passed"] += 1
+            #         print(f"   ✅ Extracted and validated: {profile_data.get('name', name)}")
+            #     else:
+            #         extraction_stats["validation_failed"] += 1
+            #         print(f"   ⚠️  Extracted but validation issues: {validation_result['issues']}")
+            # else:
+            #     extraction_stats["validation_passed"] += 1
+            #     print(f"   ✅ Extracted: {profile_data.get('name', name)}")
             
             # Combine candidate info with extracted profile
             result = {
@@ -121,8 +121,8 @@ def extract_candidate_profiles(
                 "extraction_timestamp": time.time()
             }
             
-            if validate_extraction:
-                result["validation"] = validation_result
+            # if validate_extraction:
+            #     result["validation"] = validation_result
             
             extracted_profiles.append(result)
             extraction_stats["successful"] += 1
@@ -148,9 +148,9 @@ def extract_candidate_profiles(
     print(f"   Failed: {extraction_stats['failed']}")
     print(f"   Success rate: {success_rate:.1f}%")
     
-    if validate_extraction:
-        print(f"   Validation passed: {extraction_stats['validation_passed']}")
-        print(f"   Validation issues: {extraction_stats['validation_failed']}")
+    # if validate_extraction:
+    #     print(f"   Validation passed: {extraction_stats['validation_passed']}")
+    #     print(f"   Validation issues: {extraction_stats['validation_failed']}")
     
     # Store extraction results in global state
     extraction_data = {
@@ -162,101 +162,103 @@ def extract_candidate_profiles(
     print(f"💾 {global_state_result.get('message', 'Extraction results stored in global state')}")
     
     # Return lightweight status for agent
-    return {
+    output = {
         "success": True,
         "extracted_count": extraction_stats["successful"],
         "failed_count": extraction_stats["failed"],
         "success_rate": success_rate,
         "message": f"Extracted {extraction_stats['successful']} profiles, stored in global state"
     }
+    log_info(message=f"Extraction completed: {output}", phase="EXTRACTION")
+    return output
 
 
-def _validate_extracted_profile(profile_data: Dict[str, Any], candidate_info: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Validate extracted profile data against original candidate info
+# def _validate_extracted_profile(profile_data: Dict[str, Any], candidate_info: Dict[str, Any]) -> Dict[str, Any]:
+#     """
+#     Validate extracted profile data against original candidate info
     
-    Args:
-        profile_data: Extracted profile data
-        candidate_info: Original candidate info from search
+#     Args:
+#         profile_data: Extracted profile data
+#         candidate_info: Original candidate info from search
         
-    Returns:
-        Validation result with issues list
-    """
+#     Returns:
+#         Validation result with issues list
+#     """
     
-    issues = []
-    valid = True
+#     issues = []
+#     valid = True
     
-    # Check if profile_data is valid dict
-    if not isinstance(profile_data, dict):
-        issues.append("Profile data is not a valid dictionary")
-        valid = False
-        return {"valid": False, "issues": issues}
+#     # Check if profile_data is valid dict
+#     if not isinstance(profile_data, dict):
+#         issues.append("Profile data is not a valid dictionary")
+#         valid = False
+#         return {"valid": False, "issues": issues}
     
-    # Handle both direct profile data and wrapped profile data structures
-    # Some extraction methods return wrapped data with 'profile_data' key
-    actual_profile_data = profile_data
-    if 'profile_data' in profile_data and isinstance(profile_data['profile_data'], dict):
-        actual_profile_data = profile_data['profile_data']
+#     # Handle both direct profile data and wrapped profile data structures
+#     # Some extraction methods return wrapped data with 'profile_data' key
+#     actual_profile_data = profile_data
+#     if 'profile_data' in profile_data and isinstance(profile_data['profile_data'], dict):
+#         actual_profile_data = profile_data['profile_data']
     
-    # Basic data presence checks
-    extracted_name = actual_profile_data.get('name', '').strip()
-    expected_name = candidate_info.get('name', '').strip()
+#     # Basic data presence checks
+#     extracted_name = actual_profile_data.get('name', '').strip()
+#     expected_name = candidate_info.get('name', '').strip()
     
-    if not extracted_name:
-        issues.append("Missing name in extracted profile")
-        valid = False
-    elif expected_name and extracted_name.lower() != expected_name.lower():
-        # Allow slight variations but flag major mismatches
-        if not any(word in extracted_name.lower() for word in expected_name.lower().split()):
-            issues.append(f"Name mismatch: expected '{expected_name}', got '{extracted_name}'")
-            # Don't mark as invalid for name mismatch - could be LinkedIn display variations
+#     if not extracted_name:
+#         issues.append("Missing name in extracted profile")
+#         valid = False
+#     elif expected_name and extracted_name.lower() != expected_name.lower():
+#         # Allow slight variations but flag major mismatches
+#         if not any(word in extracted_name.lower() for word in expected_name.lower().split()):
+#             issues.append(f"Name mismatch: expected '{expected_name}', got '{extracted_name}'")
+#             # Don't mark as invalid for name mismatch - could be LinkedIn display variations
     
-    # Check headline presence
-    extracted_headline = actual_profile_data.get('headline', '').strip()
-    expected_headline = candidate_info.get('headline', '').strip()
+#     # Check headline presence
+#     extracted_headline = actual_profile_data.get('headline', '').strip()
+#     expected_headline = candidate_info.get('headline', '').strip()
     
-    if not extracted_headline:
-        issues.append("Missing headline in extracted profile")
-        # Don't mark as invalid - some profiles may not have headlines visible
+#     if not extracted_headline:
+#         issues.append("Missing headline in extracted profile")
+#         # Don't mark as invalid - some profiles may not have headlines visible
     
-    # Check for basic profile completeness
-    required_fields = ['name', 'url']
-    for field in required_fields:
-        if not actual_profile_data.get(field):
-            issues.append(f"Missing required field: {field}")
-            valid = False
+#     # Check for basic profile completeness
+#     required_fields = ['name', 'url']
+#     for field in required_fields:
+#         if not actual_profile_data.get(field):
+#             issues.append(f"Missing required field: {field}")
+#             valid = False
     
-    # Check URL consistency
-    extracted_url = actual_profile_data.get('url', '')
-    expected_url = candidate_info.get('url', '') or candidate_info.get('normalized_url', '')
+#     # Check URL consistency
+#     extracted_url = actual_profile_data.get('url', '')
+#     expected_url = candidate_info.get('url', '') or candidate_info.get('normalized_url', '')
     
-    if extracted_url and expected_url:
-        # Normalize URLs for comparison
-        extracted_normalized = extracted_url.split('?')[0].rstrip('/').lower()
-        expected_normalized = expected_url.split('?')[0].rstrip('/').lower()
+#     if extracted_url and expected_url:
+#         # Normalize URLs for comparison
+#         extracted_normalized = extracted_url.split('?')[0].rstrip('/').lower()
+#         expected_normalized = expected_url.split('?')[0].rstrip('/').lower()
         
-        if extracted_normalized != expected_normalized:
-            issues.append(f"URL mismatch: navigation vs extracted")
-            # Don't mark as invalid - could be URL variations
+#         if extracted_normalized != expected_normalized:
+#             issues.append(f"URL mismatch: navigation vs extracted")
+#             # Don't mark as invalid - could be URL variations
     
-    # Check if profile seems to be a feed or error page
-    if extracted_name.lower() in ['feed updates', 'linkedin', 'error']:
-        issues.append("Profile appears to be a feed/error page")
-        valid = False
+#     # Check if profile seems to be a feed or error page
+#     if extracted_name.lower() in ['feed updates', 'linkedin', 'error']:
+#         issues.append("Profile appears to be a feed/error page")
+#         valid = False
     
-    return {
-        "valid": valid,
-        "issues": issues,
-        "extracted_name": extracted_name,
-        "expected_name": expected_name
-    }
+#     return {
+#         "valid": valid,
+#         "issues": issues,
+#         "extracted_name": extracted_name,
+#         "expected_name": expected_name
+#     }
 
 
 def get_extraction_summary() -> Dict[str, Any]:
     """Get summary of current extraction status"""
-    collector = get_url_collector()
-    total_candidates = collector.get_candidate_count()
-    candidates = collector.get_candidates()
+    # Get candidates from workflow state
+    candidates = get_candidates_for_extraction()
+    total_candidates = len(candidates)
     
     # Count how many have been extracted
     extracted_count = sum(1 for c in candidates if c.get('extracted', False))
@@ -272,8 +274,8 @@ def get_extraction_summary() -> Dict[str, Any]:
 
 def mark_candidate_extracted(url: str) -> bool:
     """Mark a candidate as extracted (internal tracking)"""
-    collector = get_url_collector()
-    candidates = collector.get_candidates()
+    # Get candidates from workflow state
+    candidates = get_candidates_for_extraction()
     
     for candidate in candidates:
         candidate_url = candidate.get('url') or candidate.get('normalized_url')

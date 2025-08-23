@@ -52,14 +52,13 @@ def generate_candidate_outreach(
     log_info(f"🔄 Retrieved {len(candidates)} quality candidates from global state", phase="OUTREACH")
     
     # Get strategy from global state
-    from ..core.workflow_state import get_strategy_for_search
-    strategy = get_strategy_for_search()
+    # from ..core.workflow_state import get_strategy_for_search
+    # strategy = get_strategy_for_search()
     
     log_info(f"📊 Generating outreach for {len(candidates)} candidates...", phase="OUTREACH")
     
-    # Prepare position context
-    position_context = _build_position_context(position_title, location, required_technologies, strategy)
-    
+    # Build position context from parameters
+        
     # Generate outreach messages
     outreach_results = []
     successful_outreach = 0
@@ -69,7 +68,7 @@ def generate_candidate_outreach(
         
         try:
             # Generate message directly without evaluation (candidates are pre-qualified)
-            outreach_result = _generate_message_for_candidate(candidate, position_context, position_title, location)
+            outreach_result = _generate_message_for_candidate(candidate,  position_title, location)
             outreach_results.append(outreach_result)
             successful_outreach += 1
                 
@@ -94,7 +93,6 @@ def generate_candidate_outreach(
         "outreach_generated": len(outreach_results),
         "recommended_count": successful_outreach,
         "messages": outreach_results,
-        "position_context": position_context,
         "generation_timestamp": datetime.now().isoformat()
     }
     
@@ -118,7 +116,7 @@ def _extract_candidate_name(candidate: Dict[str, Any]) -> str:
     return candidate.get('name', 'Unknown')
 
 
-def _generate_message_for_candidate(candidate: Dict[str, Any], position_context: str, 
+def _generate_message_for_candidate(candidate: Dict[str, Any],
                                   position_title: str, location: str) -> Dict[str, Any]:
     """Generate outreach message for a pre-qualified candidate"""
     
@@ -202,12 +200,11 @@ def _generate_message_for_candidate(candidate: Dict[str, Any], position_context:
     
     try:
         # Convert position_context string to structured dict for LLM
-        position_dict = _parse_position_context(position_context, position_title, location)
         
         # Use LLM-powered outreach generation instead of template
         outreach_result = manager.evaluate_candidate_for_outreach(
             candidate_profile, 
-            position_dict
+            {}
         )
         
         # Extract message from LLM result
@@ -217,8 +214,8 @@ def _generate_message_for_candidate(candidate: Dict[str, Any], position_context:
             message = outreach_result["message"]
         else:
             # Fallback to enhanced template if LLM fails
-            message = _create_enhanced_outreach_message(candidate_profile, position_context)
-        
+            message = _create_enhanced_outreach_message(candidate_profile, {})
+
         return {
             "name": candidate_name,
             "recommend_outreach": True,
@@ -266,38 +263,9 @@ def _extract_company_from_headline(headline: str) -> str:
     return ""
 
 
-def _parse_position_context(position_context: str, position_title: str, location: str) -> Dict[str, Any]:
-    """Parse position context string into structured dict for LLM"""
-    
-    # Extract from context string
-    context_dict = {
-        "title": position_title,
-        "location": location,
-        "experience_level": "3-8 years",
-        "technologies": [],
-        "company_type": "Tech company",
-        "remote_policy": "Hybrid/Remote-friendly"
-    }
-    
-    # Parse context string for additional info
-    if position_context:
-        lines = position_context.split('\n')
-        for line in lines:
-            line = line.strip()
-            if line.startswith("Required Technologies:") or line.startswith("Key Technologies:"):
-                tech_str = line.split(":")[-1].strip()
-                context_dict["technologies"] = [tech.strip() for tech in tech_str.split(",") if tech.strip()]
-            elif line.startswith("Target Companies:"):
-                companies_str = line.split(":")[-1].strip()
-                context_dict["strategy_companies"] = [comp.strip() for comp in companies_str.split(",") if comp.strip()]
-            elif line.startswith("Desired Seniority:"):
-                seniority_str = line.split(":")[-1].strip()
-                context_dict["seniority_levels"] = [sen.strip() for sen in seniority_str.split(",") if sen.strip()]
-    
-    return context_dict
 
 
-def _create_enhanced_outreach_message(candidate_profile: Dict[str, Any], position_context: str) -> str:
+def _create_enhanced_outreach_message(candidate_profile: Dict[str, Any], position_context: Dict[str, Any]) -> str:
     """Enhanced fallback message generation using our personalization logic"""
     
     name = candidate_profile.get("name", "")
@@ -307,17 +275,8 @@ def _create_enhanced_outreach_message(candidate_profile: Dict[str, Any], positio
     skills = candidate_profile.get("skills", [])
     about = candidate_profile.get("about", "")
     
-    # Extract position details from context
-    position_title = "Software Engineer"
-    location = "San Francisco"
-    
-    if position_context:
-        lines = position_context.split('\n')
-        for line in lines:
-            if "Position:" in line:
-                position_title = line.split("Position:")[-1].strip()
-            elif "Location:" in line:
-                location = line.split("Location:")[-1].strip()
+    # Extract position details from context (if provided)
+    position_title = position_context.get("title", "Software Engineer") if position_context else "Software Engineer"
     
     # Build personalized content using our enhanced logic
     personalization = _build_personalization_content(
@@ -478,30 +437,7 @@ def _get_evaluated_candidates() -> List[Dict[str, Any]]:
     return []
 
 
-def _build_position_context(position_title: str, location: str, 
-                          required_technologies: Optional[List[str]], 
-                          strategy: Optional[Dict[str, Any]]) -> str:
-    """Build position context from parameters and strategy"""
-    
-    context_parts = [
-        f"Position: {position_title}",
-        f"Location: {location}"
-    ]
-    
-    # Add technology requirements
-    if required_technologies:
-        context_parts.append(f"Required Technologies: {', '.join(required_technologies)}")
-    elif strategy and "key_technologies" in strategy:
-        context_parts.append(f"Key Technologies: {', '.join(strategy['key_technologies'][:5])}")
-    
-    # Add strategic context
-    if strategy:
-        if "target_companies" in strategy:
-            context_parts.append(f"Target Companies: {', '.join(strategy['target_companies'][:3])}")
-        if "seniority_indicators" in strategy:
-            context_parts.append(f"Desired Seniority: {', '.join(strategy['seniority_indicators'][:3])}")
-    
-    return "\n".join(context_parts)
+
 
 
 def _generate_single_outreach(candidate: Dict[str, Any], position_context: str, min_score: float) -> Dict[str, Any]:
@@ -963,8 +899,6 @@ Experience:
         return bonus
 
 
-# Global outreach manager instance
-_outreach_manager = CandidateOutreachManager()
 
 
 
