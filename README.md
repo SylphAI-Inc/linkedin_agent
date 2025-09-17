@@ -95,6 +95,7 @@ git clone https://github.com/SylphAI-Inc/AdalFlow
 ```bash
 # Clone and install
 # Update the pyproject.toml pointing to the adaflow directory 
+# adalflow = {path = "adalflow", develop = true}
 git clone <your-repo>
 cd linkedin_agent
 poetry lock # Optional
