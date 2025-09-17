@@ -14,8 +14,6 @@ Key Benefits:
 
 from typing import Dict, List, Any, Optional
 from datetime import datetime
-import json
-
 
 class WorkflowState:
     """Global state manager for LinkedIn recruitment workflow"""
@@ -135,7 +133,7 @@ class WorkflowState:
         """Get stored evaluation results for outreach"""
         return self._evaluation_results
     
-    def get_quality_candidates(self, min_threshold: float = None) -> List[Dict[str, Any]]:
+    def get_quality_candidates(self, min_threshold: float | None = None) -> List[Dict[str, Any]]:
         """Get quality candidates above threshold"""
         if min_threshold is None:
             min_threshold = self._stats["quality_threshold"]

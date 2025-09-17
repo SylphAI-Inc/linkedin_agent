@@ -90,7 +90,7 @@ def smart_candidate_search(
             # Light scroll to trigger lazy loading
             try:
                 run_js("window.scrollBy(0, 800);")
-                nav_wait(2)
+                nav_wait('2')
             except:
                 pass
 

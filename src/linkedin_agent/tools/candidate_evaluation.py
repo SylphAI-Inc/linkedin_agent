@@ -4,7 +4,7 @@ Candidate Evaluation Tool - LLM-powered quality assessment for extracted profile
 Provides intelligent fallback recommendations based on evaluation results
 """
 
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, Any, Optional
 from datetime import datetime
 from adalflow.core.func_tool import FunctionTool
 from ..core.workflow_state import (

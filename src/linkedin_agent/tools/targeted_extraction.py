@@ -3,7 +3,7 @@ Targeted Extraction Tool - Extract profiles from quality candidate URLs
 Since URLs are pre-filtered for quality, focus on reliable extraction and basic validation
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 import time
 
 from adalflow.core.func_tool import FunctionTool
@@ -15,7 +15,7 @@ from ..utils.logger import log_info, log_debug, log_error, log_progress
 
 
 def extract_candidate_profiles(
-    candidate_limit: int = None,
+    candidate_limit: int | None = None,
     delay_between_extractions: Optional[float] = None,
     validate_extraction: Optional[bool] = None
 ) -> Dict[str, Any]:
@@ -96,7 +96,7 @@ def extract_candidate_profiles(
             
             # Navigate to profile
             nav_go(url)
-            nav_wait(2)  # Wait for page load
+            nav_wait('2')  # Wait for page load
             
             # Extract profile data
             profile_data = extract_profile()

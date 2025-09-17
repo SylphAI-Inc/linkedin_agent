@@ -170,7 +170,8 @@ class StreamingHandler:
         details = {
             "action": "error",
             "error_type": error_type,
-            "error_message": str(error_message)
+            "error_message": str(error_message),
+            "context": None
         }
         
         if context:

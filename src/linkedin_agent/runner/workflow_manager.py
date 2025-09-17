@@ -162,8 +162,9 @@ class LinkedInWorkflowManager:
         except Exception as e:
             print(f"❌ Agent workflow failed: {e}")
             import traceback
+
             print(f"📝 Error details: {traceback.format_exc()[:200]}...")
-            return [] #candidates
+            return []  # candidates
 
     def _print_agent_execution_steps(self, result) -> None:
         """Print agent execution steps with enhanced logging"""
@@ -226,7 +227,7 @@ class LinkedInWorkflowManager:
         self,
         candidates: List[Dict[str, Any]],
         output_dir: str = "results",
-        strategy_data: Dict[str, Any] = None,
+        strategy_data: Dict[str, Any] | None = None,
     ) -> Dict[str, str]:
         """Step 4: Save recruitment results with error handling"""
         try:
@@ -256,7 +257,7 @@ class LinkedInWorkflowManager:
                 "evaluation_file": "Error: Could not save",
                 "candidates_file": "Error: Could not save",
                 "txt_file": "Error: Could not save",
-                "candidates_count": len(candidates),
+                "candidates_count": str(len(candidates)),
             }
 
     def _build_complete_candidate_data(
@@ -507,9 +508,9 @@ class LinkedInWorkflowManager:
 
     def _merge_candidate_data(
         self,
-        extraction_results: Dict[str, Any],
-        evaluation_results: Dict[str, Any],
-        outreach_results: Dict[str, Any],
+        extraction_results: Dict[str, Any] | None,
+        evaluation_results: Dict[str, Any] | None,
+        outreach_results: Dict[str, Any] | None,
     ) -> List[Dict[str, Any]]:
         """Merge candidate data from extraction, evaluation, and outreach results"""
 
@@ -523,47 +524,56 @@ class LinkedInWorkflowManager:
             batch_results = get_profiles_for_evaluation()
             print(f"📥 Found {len(batch_results)} extraction results from global state")
 
-        
-            eval_scores = {}            
+            eval_scores = {}
             # Fallback to function results
             if evaluation_results and isinstance(evaluation_results, dict):
-                all_evaluated = evaluation_results.get('all_evaluated_candidates', [])
+                all_evaluated = evaluation_results.get("all_evaluated_candidates", [])
                 for eval_candidate in all_evaluated:
-                    name = eval_candidate.get('name', '')
-                    url = eval_candidate.get('url', '')
+                    name = eval_candidate.get("name", "")
+                    url = eval_candidate.get("url", "")
                     if name or url:
                         key = name if name else url
                         eval_scores[key] = eval_candidate
-                print(f"🎯 Found {len(eval_scores)} evaluation scores from function results")
+                print(
+                    f"🎯 Found {len(eval_scores)} evaluation scores from function results"
+                )
 
             # Create lookup for outreach data by candidate name
             outreach_data = {}
             # Fallback to function results
             if outreach_results and isinstance(outreach_results, dict):
-                outreach_messages = outreach_results.get('messages', [])
+                outreach_messages = outreach_results.get("messages", [])
                 for outreach_msg in outreach_messages:
-                    name = outreach_msg.get('name', '')
+                    name = outreach_msg.get("name", "")
                     if name:
                         outreach_data[name] = outreach_msg
-                print(f"📧 Found {len(outreach_data)} outreach messages from function results")
+                print(
+                    f"📧 Found {len(outreach_data)} outreach messages from function results"
+                )
 
             # Merge all data sources
             for i, result in enumerate(batch_results):
-                log_debug(f"Processing merge result {i+1}/{len(batch_results)}", phase="MERGE_DATA")
+                log_debug(
+                    f"Processing merge result {i + 1}/{len(batch_results)}",
+                    phase="MERGE_DATA",
+                )
                 log_debug(f"Result type: {type(result)}", phase="MERGE_DATA")
                 if isinstance(result, dict):
                     log_debug(f"Result keys: {list(result.keys())}", phase="MERGE_DATA")
-                    log_debug(f"Has profile_data: {result.get('profile_data') is not None}", phase="MERGE_DATA")
+                    log_debug(
+                        f"Has profile_data: {result.get('profile_data') is not None}",
+                        phase="MERGE_DATA",
+                    )
                 else:
                     log_debug(f"Result is not dict: {result}", phase="MERGE_DATA")
 
-                if isinstance(result, dict) and result.get('profile_data'):
-                    candidate_info = result.get('candidate_info', {})
-                    profile_data = result.get('profile_data', {})
+                if isinstance(result, dict) and result.get("profile_data"):
+                    candidate_info = result.get("candidate_info", {})
+                    profile_data = result.get("profile_data", {})
 
                     # Get candidate identifiers
-                    name = profile_data.get('name', candidate_info.get('name', ''))
-                    url = candidate_info.get('url', profile_data.get('url', ''))
+                    name = profile_data.get("name", candidate_info.get("name", ""))
+                    url = candidate_info.get("url", profile_data.get("url", ""))
 
                     # Find matching evaluation and outreach data
                     eval_data = eval_scores.get(name, eval_scores.get(url, {}))
@@ -573,51 +583,70 @@ class LinkedInWorkflowManager:
                     candidate = {
                         "search_info": {
                             "url": url,
-                            "headline_score": candidate_info.get('headline_score', 0.0),
-                            "name": name
+                            "headline_score": candidate_info.get("headline_score", 0.0),
+                            "name": name,
                         },
                         "profile_details": {
                             **profile_data,  # Complete profile (experiences, education, skills, etc.)
-                            "quality_assessment": eval_data.get('quality_assessment', candidate_info.get('quality_assessment', {}))
-                        }
+                            "quality_assessment": eval_data.get(
+                                "quality_assessment",
+                                candidate_info.get("quality_assessment", {}),
+                            ),
+                        },
                     }
 
                     # Add evaluation scores if available
                     if eval_data:
                         # Handle quality_assessment whether it's a dict or dataclass
-                        quality_assessment = candidate["profile_details"]["quality_assessment"]
+                        quality_assessment = candidate["profile_details"][
+                            "quality_assessment"
+                        ]
 
                         # Convert dataclass to dict if needed using .to_dict() method
-                        if hasattr(quality_assessment, 'to_dict'):
+                        if hasattr(quality_assessment, "to_dict"):
                             quality_assessment = quality_assessment.to_dict()
                         elif not isinstance(quality_assessment, dict):
                             quality_assessment = {}
 
                         # Update with evaluation data
-                        quality_assessment.update({
-                            "overall_score": eval_data.get('overall_score', 0.0),
-                            "component_scores": eval_data.get('component_scores', {}),
-                            "meets_threshold": eval_data.get('meets_threshold', False),
-                            "strengths": eval_data.get('strengths', []),
-                            "concerns": eval_data.get('concerns', []),
-                            "evaluation_timestamp": eval_data.get('evaluation_timestamp', ''),
-                            "strategic_bonuses": eval_data.get('strategic_bonuses', {}),
-                            "baseline_scores": eval_data.get('baseline_scores', {})
-                        })
+                        quality_assessment.update(
+                            {
+                                "overall_score": eval_data.get("overall_score", 0.0),
+                                "component_scores": eval_data.get(
+                                    "component_scores", {}
+                                ),
+                                "meets_threshold": eval_data.get(
+                                    "meets_threshold", False
+                                ),
+                                "strengths": eval_data.get("strengths", []),
+                                "concerns": eval_data.get("concerns", []),
+                                "evaluation_timestamp": eval_data.get(
+                                    "evaluation_timestamp", ""
+                                ),
+                                "strategic_bonuses": eval_data.get(
+                                    "strategic_bonuses", {}
+                                ),
+                                "baseline_scores": eval_data.get("baseline_scores", {}),
+                            }
+                        )
 
                         # Assign back to candidate
-                        candidate["profile_details"]["quality_assessment"] = quality_assessment
+                        candidate["profile_details"]["quality_assessment"] = (
+                            quality_assessment
+                        )
 
                         # IMPORTANT: Add overall_score at top level for outreach compatibility
-                        candidate["overall_score"] = eval_data.get('overall_score', 0.0)
+                        candidate["overall_score"] = eval_data.get("overall_score", 0.0)
 
                     # Add outreach data if available
                     if outreach_msg:
                         candidate["profile_details"]["outreach_info"] = {
-                            "message": outreach_msg.get('message', ''),
-                            "recommend_outreach": outreach_msg.get('recommend_outreach', False),
-                            "outreach_score": outreach_msg.get('score', 0.0),
-                            "outreach_reasoning": outreach_msg.get('reasoning', '')
+                            "message": outreach_msg.get("message", ""),
+                            "recommend_outreach": outreach_msg.get(
+                                "recommend_outreach", False
+                            ),
+                            "outreach_score": outreach_msg.get("score", 0.0),
+                            "outreach_reasoning": outreach_msg.get("reasoning", ""),
                         }
 
                     candidates.append(candidate)
@@ -627,197 +656,6 @@ class LinkedInWorkflowManager:
 
         print(f"📊 Merged complete data for {len(candidates)} candidates")
         return candidates
-
-    # def _extract_candidates_from_evaluation(
-    #     self, evaluation_results
-    # ) -> List[Dict[str, Any]]:
-    #     """Extract candidates from evaluation tool results (preferred - has quality scores)"""
-    #     if not evaluation_results or not isinstance(evaluation_results, dict):
-    #         return []
-
-    #     candidates = []
-
-    #     # Get all evaluated candidates (both quality and non-quality)
-    #     all_candidates = evaluation_results.get("all_evaluated_candidates", [])
-    #     print(f"🎯 Processing {len(all_candidates)} evaluated candidates")
-
-    #     # Use original candidate data from evaluation results for complete profile info
-    #     for candidate in all_candidates:
-    #         if isinstance(candidate, dict):
-    #             # Extract the original nested structure that has complete profile data
-    #             original_candidate = candidate.get("original_candidate", candidate)
-
-    #             # Get candidate info and profile data
-    #             if (
-    #                 "candidate_info" in original_candidate
-    #                 and "profile_data" in original_candidate
-    #             ):
-    #                 candidate_info = original_candidate["candidate_info"]
-    #                 profile_data = original_candidate["profile_data"]
-    #             else:
-    #                 # Fallback to flat structure
-    #                 candidate_info = candidate
-    #                 profile_data = candidate
-
-    #             candidates.append(
-    #                 {
-    #                     "search_info": {
-    #                         "url": candidate_info.get(
-    #                             "url", profile_data.get("url", "")
-    #                         ),
-    #                         "headline_score": candidate.get(
-    #                             "overall_score",
-    #                             candidate_info.get("headline_score", 0.0),
-    #                         ),
-    #                         "name": profile_data.get(
-    #                             "name",
-    #                             candidate_info.get("name", candidate.get("name", "")),
-    #                         ),
-    #                     },
-    #                     "profile_details": {
-    #                         **profile_data,  # Include all profile data (experiences, education, skills, etc.)
-    #                         "quality_assessment": {
-    #                             "overall_score": candidate.get("overall_score", 0.0),
-    #                             "component_scores": candidate.get(
-    #                                 "component_scores", {}
-    #                             ),
-    #                             "meets_threshold": candidate.get(
-    #                                 "meets_threshold", False
-    #                             ),
-    #                             "strengths": candidate.get("strengths", []),
-    #                             "concerns": candidate.get("concerns", []),
-    #                             "evaluation_timestamp": candidate.get(
-    #                                 "evaluation_timestamp", ""
-    #                             ),
-    #                             "strategic_bonuses": candidate.get(
-    #                                 "strategic_bonuses", {}
-    #                             ),
-    #                             "baseline_scores": candidate.get("baseline_scores", {}),
-    #                         },
-    #                     },
-    #                 }
-    #             )
-
-    #     return candidates
-
-    # def _extract_candidates_from_extraction(
-    #     self, extraction_results
-    # ) -> List[Dict[str, Any]]:
-    #     """Extract candidates from extraction tool results (fallback)"""
-    #     if not extraction_results or not isinstance(extraction_results, dict):
-    #         return []
-
-    #     candidates = []
-    #     batch_results = extraction_results.get("results", [])
-
-    #     print(f"📥 Processing {len(batch_results)} extraction results")
-
-    #     for result in batch_results:
-    #         if isinstance(result, dict) and result.get("profile_data"):
-    #             candidate_info = result.get("candidate_info", {})
-    #             profile_data = result.get("profile_data", {})
-
-    #             candidates.append(
-    #                 {
-    #                     "search_info": {
-    #                         "url": candidate_info.get("url", ""),
-    #                         "headline_score": candidate_info.get("headline_score", 0.0),
-    #                         "name": candidate_info.get("name", ""),
-    #                     },
-    #                     "profile_details": {
-    #                         **profile_data,
-    #                         "quality_assessment": candidate_info.get(
-    #                             "quality_assessment", {}
-    #                         ),
-    #                     },
-    #                 }
-    #             )
-
-    #     return candidates
-
-    # def _extract_url_from_step_history(self, steps, current_step) -> str:
-    #     """Extract LinkedIn URL from step history - improved for AdalFlow structure"""
-    #     # Look for recent 'go' action before current step
-    #     try:
-    #         current_index = steps.index(current_step)
-    #     except ValueError:
-    #         current_index = len(steps)  # If current_step not found, search all steps
-
-    #     for i in range(current_index - 1, -1, -1):
-    #         step = steps[i]
-
-    #         # Handle both action and function attributes
-    #         action = getattr(step, "action", None)
-    #         function = getattr(step, "function", None)
-    #         func_obj = action or function
-
-    #         if func_obj:
-    #             func_name = getattr(func_obj, "name", None)
-    #             func_kwargs = getattr(func_obj, "kwargs", {})
-
-    #             # Look for 'go' function with LinkedIn URL
-    #             if (
-    #                 func_name == "go"
-    #                 and isinstance(func_kwargs, dict)
-    #                 and "linkedin.com/in/" in str(func_kwargs.get("url", ""))
-    #             ):
-    #                 url = func_kwargs["url"]
-    #                 # Clean up URL - remove miniProfileUrn params
-    #                 if "?miniProfileUrn" in url:
-    #                     url = url.split("?miniProfileUrn")[0]
-    #                 if not url.endswith("/"):
-    #                     url += "/"
-    #                 return url
-
-    #     return "Unknown URL"
-
-    # def _execute_fallback_workflow(self) -> List[Dict[str, Any]]:
-    #     """Fallback workflow when agent fails"""
-    #     print("🔄 Executing fallback workflow...")
-
-    #     try:
-    #         from ..tools.people_search import search_people
-    #         from ..tools.profile_extractor import extract_profile  # Fixed import
-    #         from ..tools.web_nav import go
-    #         import time
-
-    #         # Direct search
-    #         search_results = search_people(self.query, self.location, self.limit)
-
-    #         if search_results.get("count", 0) > 0:
-    #             candidates = []
-    #             for i, candidate in enumerate(search_results.get("results", [])[:self.limit]):
-    #                 try:
-    #                     print(f"📝 Extracting profile {i+1}: {candidate['name']}")
-
-    #                     # Add delay to avoid rate limiting
-    #                     if i > 0:
-    #                         time.sleep(1)
-
-    #                     go(candidate["url"])
-    #                     time.sleep(0.5)  # Wait for page load
-
-    #                     profile_data = extract_profile()  # Fixed function call
-
-    #                     # Validate profile data
-    #                     if isinstance(profile_data, dict) and profile_data.get('name'):
-    #                         candidates.append({"search_info": candidate, "profile_details": profile_data})
-    #                         print(f"    ✅ Successfully extracted: {profile_data.get('name')}")
-    #                     else:
-    #                         print(f"    ⚠️  Invalid profile data for {candidate['name']} - skipping")
-
-    #                 except Exception as profile_error:
-    #                     print(f"    ❌ Failed to extract profile for {candidate['name']}: {profile_error}")
-    #                     continue  # Continue with next candidate
-
-    #             return candidates
-    #         else:
-    #             print("❌ No candidates found in fallback search")
-    #             return []
-
-    #     except Exception as e:
-    #         print(f"❌ Fallback workflow also failed: {e}")
-    #         return []
 
     def _extract_candidates_from_final_answer(self, result) -> List[Dict[str, Any]]:
         """Extract candidates from agent's final answer when step history fails"""
@@ -947,7 +785,7 @@ class LinkedInWorkflowManager:
                             f"    ✅ Successfully extracted: {profile_data.get('name', 'Unknown')}"
                         )
                     else:
-                        print(f"    ⚠️  Invalid profile data - skipping")
+                        print("    ⚠️  Invalid profile data - skipping")
 
                 except Exception as e:
                     print(f"    ❌ Failed to extract profile {i}: {e}")

@@ -4,8 +4,6 @@ Log Viewer for LinkedIn Agent
 Quick tool to view the latest log files
 """
 
-import os
-import sys
 from pathlib import Path
 import argparse
 
