@@ -4,8 +4,6 @@ Interactive Configuration Tool for LinkedIn Recruitment Agent
 
 This script helps users easily configure the agent without editing code.
 """
-
-import os
 import sys
 from pathlib import Path
 from .config_user import USER_CONFIG, configure_for_high_quality, configure_for_volume, configure_for_conservative

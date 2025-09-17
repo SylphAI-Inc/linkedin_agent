@@ -270,13 +270,6 @@ def store_outreach_results(outreach_data: Dict[str, Any]) -> Dict[str, Any]:
     """Store outreach results and return lightweight response"""
     return _workflow_state.set_outreach_results(outreach_data)
 
-
-# # Data access functions (for functions that need the actual data)
-# def get_strategy_for_search() -> Optional[Dict[str, Any]]:
-#     """Get strategy for search function"""
-#     return _workflow_state.get_strategy()
-
-
 def get_candidates_for_extraction() -> List[Dict[str, Any]]:
     """Get search results for extraction function"""
     return _workflow_state.get_search_results()

@@ -101,18 +101,6 @@ def extract_candidate_profiles(
             # Extract profile data
             profile_data = extract_profile()
             
-            # if validate_extraction:
-            #     validation_result = _validate_extracted_profile(profile_data, candidate)
-            #     if validation_result["valid"]:
-            #         extraction_stats["validation_passed"] += 1
-            #         print(f"   ✅ Extracted and validated: {profile_data.get('name', name)}")
-            #     else:
-            #         extraction_stats["validation_failed"] += 1
-            #         print(f"   ⚠️  Extracted but validation issues: {validation_result['issues']}")
-            # else:
-            #     extraction_stats["validation_passed"] += 1
-            #     print(f"   ✅ Extracted: {profile_data.get('name', name)}")
-            
             # Combine candidate info with extracted profile
             result = {
                 "candidate_info": candidate,
@@ -120,9 +108,6 @@ def extract_candidate_profiles(
                 "extraction_success": True,
                 "extraction_timestamp": time.time()
             }
-            
-            # if validate_extraction:
-            #     result["validation"] = validation_result
             
             extracted_profiles.append(result)
             extraction_stats["successful"] += 1
@@ -141,16 +126,13 @@ def extract_candidate_profiles(
     
     success_rate = (extraction_stats["successful"] / extraction_stats["attempted"] * 100) if extraction_stats["attempted"] > 0 else 0
     
-    print(f"\n📊 EXTRACTION SUMMARY:")
+    print("\n📊 EXTRACTION SUMMARY:")
     print(f"   Total candidates: {len(candidates)}")
     print(f"   Attempted: {extraction_stats['attempted']}")
     print(f"   Successful: {extraction_stats['successful']}")
     print(f"   Failed: {extraction_stats['failed']}")
     print(f"   Success rate: {success_rate:.1f}%")
     
-    # if validate_extraction:
-    #     print(f"   Validation passed: {extraction_stats['validation_passed']}")
-    #     print(f"   Validation issues: {extraction_stats['validation_failed']}")
     
     # Store extraction results in global state
     extraction_data = {

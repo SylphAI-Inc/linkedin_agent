@@ -48,7 +48,7 @@ torch = ["torch (>=2.3.1)"]
 
 [package.source]
 type = "directory"
-url = "../adal/backend/AdalFlow/adalflow"
+url = "../AdalFlow/adalflow"
 
 [[package]]
 name = "annotated-types"
@@ -1225,4 +1225,4 @@ test = ["websockets"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "c3f1431d651fb82f31750ad3d342ee7d43d590d8942aee091f432a9c76012724"
+content-hash = "d3312554110329929409318243b387a14d682f7217f013df0dcf5bef2efb03ad"

@@ -38,7 +38,7 @@ def evaluate_candidates_quality(
     if target_count is None:
         target_count = search_config.target_quality_candidates
     
-    log_info(f"🎯 Starting comprehensive candidate evaluation...", phase="EVALUATION")
+    log_info("🎯 Starting comprehensive candidate evaluation...", phase="EVALUATION")
     log_info(f"   Quality threshold: {min_quality_threshold}, Target count: {target_count}", phase="EVALUATION")
     log_progress("Initializing evaluation system", "EVALUATION")
     
@@ -60,8 +60,8 @@ def evaluate_candidates_quality(
     
     # Enhanced debug logging for empty candidates case
     if not candidates:
-        log_error(f"No candidates found in global state for evaluation", phase="EVALUATION")
-        log_debug(f"Checking global workflow state...", phase="EVALUATION")
+        log_error("No candidates found in global state for evaluation", phase="EVALUATION")
+        log_debug("Checking global workflow state...", phase="EVALUATION")
         
         workflow_status = get_workflow_summary()
         log_debug(f"Current workflow phase: {workflow_status.get('current_phase')}", phase="EVALUATION")
@@ -71,7 +71,7 @@ def evaluate_candidates_quality(
         # Check if extraction results exist but are in wrong format
         extraction_results = _workflow_state._extraction_results
         if extraction_results:
-            log_debug(f"Extraction results exist but appear malformed:", phase="EVALUATION")
+            log_debug("Extraction results exist but appear malformed:", phase="EVALUATION")
             log_debug(f"First extraction result type: {type(extraction_results[0])}", phase="EVALUATION")
             log_debug(f"First extraction result keys: {list(extraction_results[0].keys()) if isinstance(extraction_results[0], dict) else 'Not dict'}", phase="EVALUATION")
         
@@ -87,7 +87,7 @@ def evaluate_candidates_quality(
             }
         }
     
-    log_info(f"📊 PHASE 2: Starting LLM-powered candidate assessment...")
+    log_info("📊 PHASE 2: Starting LLM-powered candidate assessment...")
     log_info(f"   Processing {len(candidates)} candidates with AI evaluation")
     
     # LLM-powered evaluation
@@ -138,40 +138,18 @@ def evaluate_candidates_quality(
     effective_target = min(target_count, candidates_available)
     quality_sufficient = quality_stats["above_threshold"] >= effective_target
     
-    # HEAP CLEANUP: Remove low-quality candidates from search heap
-    log_info(f"\n🧹 HEAP CLEANUP: Removing low-quality candidates from search heap...")
-    try:
-        from .smart_search import get_current_search_heap
-        
-        heap = get_current_search_heap()
-        if heap and hasattr(heap, 'remove_low_quality_candidates'):
-            removed_count = heap.remove_low_quality_candidates(min_quality_threshold)
-            remaining_heap_size = len(heap.heap) if hasattr(heap, 'heap') else 0
-            log_info(f"   🗑️ Removed {removed_count} low-quality candidates from heap")
-            log_info(f"   📊 Remaining heap size: {remaining_heap_size} candidates")
-            
-            # Check if heap is now too small and needs expansion
-            if remaining_heap_size < target_count:
-                log_info(f"   ⚠️ Heap size ({remaining_heap_size}) below target ({target_count}) - may trigger search expansion")
-        else:
-            log_info(f"   ℹ️ No active search heap found - cleanup skipped")
-    except Exception as cleanup_error:
-        log_info(f"   ⚠️ Heap cleanup failed: {cleanup_error}")
-        
-    log_info(f"\n🤖 PHASE 3: Analyzing results and generating recommendations...")
-    
     # Generate intelligent fallback recommendation
     fallback_rec = _generate_fallback_recommendation(
         quality_stats, quality_sufficient, target_count, min_quality_threshold
     )
     
-    log_info(f"\n📈 PHASE 4: FINAL EVALUATION RESULTS")
+    log_info("\n📈 PHASE 4: FINAL EVALUATION RESULTS")
     log_info(f"   Average Quality: {avg_score:.2f}")
     log_info(f"   Quality Range: {min_score:.2f} - {max_score:.2f}")
     log_info(f"   Above Threshold: {quality_stats['above_threshold']}/{quality_stats['total_evaluated']}")
     log_info(f"   Quality Sufficient: {'✅ Yes' if quality_sufficient else '❌ No'}")
     log_info(f"   Recommendation: {fallback_rec['action']}")
-    log_info(f"✅ Candidate evaluation workflow completed!")
+    log_info("✅ Candidate evaluation workflow completed!")
     
     # Create result data for global state storage
     evaluation_result_data = {
@@ -212,8 +190,6 @@ def evaluate_candidates_quality(
         "fallback_recommendation": fallback_rec["action"],
         "message": f"Evaluated {quality_stats['total_evaluated']} candidates, {quality_stats['above_threshold']} above threshold {min_quality_threshold}"
     }
-
-
 
 
 def _extract_candidate_name(candidate: Dict[str, Any]) -> str:

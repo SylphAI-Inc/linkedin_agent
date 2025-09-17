@@ -4,7 +4,6 @@ Provides file-based logging with better organization and readability
 """
 
 import logging
-import os
 import sys
 from datetime import datetime
 from typing import Optional, Dict, Any

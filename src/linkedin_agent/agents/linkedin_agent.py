@@ -1,10 +1,8 @@
-from typing import Any, Dict, List, Optional
-from ..utils.logger import log_info, log_debug, log_error, log_progress
+from typing import Any, Dict, Optional
 
 from adalflow.components.agent.agent import Agent
 from adalflow.components.agent.runner import Runner
 from adalflow.components.model_client.openai_client import OpenAIClient
-from adalflow.core.func_tool import FunctionTool
 
 from ..config import AgentConfig, get_model_kwargs
 # from ..tools.linkedin_auth import CheckAuthTool, NavigateLinkedInTool, PromptLoginTool
@@ -41,17 +39,11 @@ class LinkedInAgent:
 
         # Prepare default tools if none provided
         self.tools = [
-            # LinkedIn authentication and navigation
-            # CheckAuthTool,
-            # NavigateLinkedInTool, 
-            # PromptLoginTool,
-            # Simplified 4-step workflow (strategy removed as redundant)
             SmartCandidateSearchTool,  # 1. Smart candidate discovery with quality scoring
-            ExtractCandidateProfilesTool,  # 2. Extract detailed profiles from search results
-            CandidateEvaluationTool,  # 3. Comprehensive quality evaluation with fallback recommendations
-            CandidateOutreachGenerationTool,  # 4. Generate personalized outreach messages
-            # Legacy tools (used by workflow manager for backwards compatibility)
-            SaveOutreachResultsTool,  # Save outreach results to file
+            # ExtractCandidateProfilesTool,  # 2. Extract detailed profiles from search results
+            # CandidateEvaluationTool,  # 3. Comprehensive quality evaluation with fallback recommendations
+            # CandidateOutreachGenerationTool,  # 4. Generate personalized outreach messages
+            # SaveOutreachResultsTool,  # Save outreach results to file
         ]
 
         # Get default role description if not provided

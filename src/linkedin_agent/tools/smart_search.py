@@ -11,92 +11,92 @@ from ..core.workflow_state import store_search_results
 from ..utils.logger import log_info, log_debug, log_error
 from .web_nav import js as run_js, go as nav_go, wait as nav_wait
 from ..models.quality_system import QualityAnalyzer, QualityThresholds, SearchBudget
+from ..config_user import get_search_config
+
 
 # run the search quer and extract candidates from each page, inital scoring and the filtering
 def smart_candidate_search(
-    query: str, 
+    query: str,
     location: str,
     page_limit: int = 3,
     min_score: float = 3.0,
-    # target_count: int = 10,
-    network_filter: str = "F",  # "F" for 1st degree (default), "S" for 2nd, "O" for 3rd+, "" for all
-    target_count: int = 10
+    target_count: int = 10,
 ) -> Dict[str, Any]:
     """
     Search for candidates on LinkedIn for {page_limit} pages, extract basic info, and perform LLM-based quality assessment.
     Collect up to {target_count} candidates meeting the minimum score threshold.
-    
+
     Args:
         query: Search query (role/title)
         location: Geographic location
         page_limit: Number of pages to search (default 3)
         min_score: Minimum score to include candidate (default 3.0)
-        network_filter: Network connection filter, "F" for 1st degree (default), "S" for 2nd, "O" for 3rd+, "" for all
-        
     Returns:
         Dict with search results
     """
-    
+
     log_info(f"🔍 Searching: '{query}' in {location}")
-    
+
+    search_config = get_search_config()
+    network_filter = search_config.network_filter
+
     # Build search query
     search_query = f"{query} {location}".strip() if location else query
-    
+
     # Initialize quality analyzer for LLM-based assessment
     thresholds = QualityThresholds(
-        minimum_acceptable=min_score,
-        target_quality=7.0,
-        exceptional_quality=9.0
+        minimum_acceptable=min_score, target_quality=7.0, exceptional_quality=9.0
     )
-    budget = SearchBudget(
-        initial_page_limit=page_limit,
-        max_page_limit=page_limit
-    )
+    budget = SearchBudget(initial_page_limit=page_limit, max_page_limit=page_limit)
     quality_analyzer = QualityAnalyzer(thresholds, budget)
-    
+
     all_candidates = []
     seen_urls = set()
-    
+
     try:
         for page in range(page_limit):
             log_info(f"📖 Searching page {page + 1}/{page_limit}")
-            
+
             # Build URL with pagination and network filter
             search_url = f"https://www.linkedin.com/search/results/people/?keywords={quote_plus(search_query)}"
-            
+
             # Add network filter (must come before pagination for LinkedIn)
             if network_filter:
                 # Use proper URL encoding for network filter array
                 # F = 1st degree, S = 2nd degree, O = 3rd+ degree
                 search_url += f"&network=[%22{network_filter}%22]"
-                log_debug(f"Using network filter: {network_filter} (1st degree)" if network_filter == "F" else f"Using network filter: {network_filter}")
-            
+                log_debug(
+                    f"Using network filter: {network_filter} (1st degree)"
+                    if network_filter == "F"
+                    else f"Using network filter: {network_filter}"
+                )
+
             # Add pagination
             if page > 0:
                 search_url += f"&page={page + 1}"
-            
+
             log_debug(f"🌐 Navigating to: {search_url}")
             nav_go(search_url)
-            
+
             # Wait for search results to load
             try:
                 nav_wait(".search-results-container li, .search-no-results", 10)
             except:
                 log_debug("Timeout waiting for search results")
-            
+
             # # Ensure we're on the People results tab
             # _ensure_people_tab()
-            
+
             # Light scroll to trigger lazy loading
             try:
                 run_js("window.scrollBy(0, 800);")
                 nav_wait(2)
             except:
                 pass
-            
+
             # Extract candidates from page
             candidates = _extract_candidates_from_page()
-            
+
             if not candidates:
                 log_info(f"No more results on page {page + 1}")
                 # Debug: Check what's actually on the page
@@ -105,90 +105,111 @@ def smart_candidate_search(
 
             log_info(f"Found {len(candidates)} candidates on page {page + 1}")
             log_info(f"Candidates info: {candidates}")
-            
+
             # Process and deduplicate candidates
             for candidate in candidates:
-                url = candidate.get('url', '')
+                url = candidate.get("url", "")
                 if url and url not in seen_urls:
                     seen_urls.add(url)
-                    
+
                     # Use LLM-based quality assessment
                     try:
                         # Create candidate data for assessment
                         candidate_data = {
-                            'name': candidate.get('name', ''),
-                            'headline': candidate.get('headline', ''),
-                            'url': url
+                            "name": candidate.get("name", ""),
+                            "headline": candidate.get("headline", ""),
+                            "url": url,
                         }
-                        
+
                         # Get LLM quality assessment
                         quality_assessment = quality_analyzer.assess_candidate_quality(
                             candidate_data=candidate_data,
                             role_query=query,
-                            job_requirements=f"Looking for {query} in {location}" if location else f"Looking for {query}"
+                            job_requirements=f"Looking for {query} in {location}"
+                            if location
+                            else f"Looking for {query}",
                         )
-                        
+
                         score = quality_assessment.overall_score
-                        candidate['score'] = score
-                        candidate['quality_assessment'] =quality_assessment
+                        candidate["score"] = score
+                        candidate["quality_assessment"] = quality_assessment
                         if score >= min_score:
                             all_candidates.append(candidate)
-                            strength = quality_assessment.strengths[0] if quality_assessment.strengths else 'Good match'
-                            log_info(f"   ✅ {candidate['name']} (Score: {score:.1f}) - {strength}")
+                            strength = (
+                                quality_assessment.strengths[0]
+                                if quality_assessment.strengths
+                                else "Good match"
+                            )
+                            log_info(
+                                f"   ✅ {candidate['name']} (Score: {score:.1f}) - {strength}"
+                            )
                         else:
-                            concern = quality_assessment.concerns[0] if quality_assessment.concerns else 'Below threshold'
-                            log_debug(f"   ❌ {candidate['name']} (Score: {score:.1f}) - {concern}")
-                    
+                            concern = (
+                                quality_assessment.concerns[0]
+                                if quality_assessment.concerns
+                                else "Below threshold"
+                            )
+                            log_debug(
+                                f"   ❌ {candidate['name']} (Score: {score:.1f}) - {concern}"
+                            )
+
                     except Exception as e:
-                        log_debug(f"LLM assessment failed for {candidate.get('name', 'Unknown')}: {e}")
+                        log_debug(
+                            f"LLM assessment failed for {candidate.get('name', 'Unknown')}: {e}"
+                        )
                         # Fallback: basic keyword matching
-                        headline = candidate.get('headline', '').lower()
+                        headline = candidate.get("headline", "").lower()
                         query_lower = query.lower()
                         score = 5.0 if query_lower in headline else 3.0
-                        candidate['score'] = score
-                        
+                        candidate["score"] = score
+
                         if score >= min_score:
                             all_candidates.append(candidate)
-                            log_info(f"   ✅ {candidate['name']} (Fallback Score: {score:.1f})")
+                            log_info(
+                                f"   ✅ {candidate['name']} (Fallback Score: {score:.1f})"
+                            )
                         else:
-                            log_debug(f"   ❌ {candidate['name']} (Fallback Score: {score:.1f})")
-            
+                            log_debug(
+                                f"   ❌ {candidate['name']} (Fallback Score: {score:.1f})"
+                            )
+
             # Stop if we have enough candidates
             if len(all_candidates) >= target_count:
                 log_info(f"✅ Found {target_count} candidates, stopping search")
                 break
-            
+
             time.sleep(2)  # Rate limiting
-    
+
     except Exception as e:
         log_error(f"Search error: {e}")
         return {
             "success": False,
             "error": str(e),
-            "candidates_found": len(all_candidates)
+            "candidates_found": len(all_candidates),
         }
-    
+
     # Sort by score and limit to target count
-    all_candidates.sort(key=lambda x: x['score'], reverse=True)
+    all_candidates.sort(key=lambda x: x["score"], reverse=True)
     final_candidates = all_candidates[:target_count]
-    
+
     log_info(f"🎯 Search complete: {len(final_candidates)} candidates found")
-    
+
     # Store in global state
     store_search_results(final_candidates)
-    
+
     output = {
         "success": True,
         "candidates_found": len(final_candidates),
         "candidates": final_candidates,
-        "message": f"Found {len(final_candidates)} candidates"
+        "message": f"Found {len(final_candidates)} candidates",
     }
     log_info(f"Search output: {output}")
     return output
 
+
 def _extract_candidates_from_page() -> List[Dict[str, Any]]:
     """Extract candidate data from current search results page"""
-    
+
     # First check if there are any results
     count_code = """
     (() => {
@@ -196,7 +217,7 @@ def _extract_candidates_from_page() -> List[Dict[str, Any]]:
       return nodes ? nodes.length : 0;
     })()
     """
-    
+
     try:
         count = int(run_js(count_code) or 0)
         if count == 0:
@@ -204,7 +225,7 @@ def _extract_candidates_from_page() -> List[Dict[str, Any]]:
             return []
     except:
         return []
-    
+
     # Extract candidates using the proven logic from people_search.py
     extraction_code = """
     (() => {
@@ -272,7 +293,7 @@ def _extract_candidates_from_page() -> List[Dict[str, Any]]:
       }).filter(x => x.url && x.name);
     })()
     """
-    
+
     try:
         results = run_js(extraction_code)
         if results:
@@ -283,6 +304,7 @@ def _extract_candidates_from_page() -> List[Dict[str, Any]]:
     except Exception as e:
         log_error(f"Extraction error: {e}")
         return []
+
 
 def _debug_page_if_no_results():
     """Debug helper to understand why no results were extracted"""
@@ -322,16 +344,19 @@ def _debug_page_if_no_results():
       return info;
     })()
     """
-    
+
     try:
         debug_info = run_js(debug_code)
         log_debug(f"Page debug info: {debug_info}")
-        if debug_info.get('hasNoResultsMessage'):
+        if debug_info.get("hasNoResultsMessage"):
             log_debug("LinkedIn returned 'No results found' message")
-        if debug_info.get('profileLinkCount', 0) > 0:
-            log_debug(f"Found {debug_info['profileLinkCount']} profile links but extraction failed")
+        if debug_info.get("profileLinkCount", 0) > 0:
+            log_debug(
+                f"Found {debug_info['profileLinkCount']} profile links but extraction failed"
+            )
     except Exception as e:
         log_debug(f"Debug failed: {e}")
+
 
 # Note: We now use LLM-based quality assessment from quality_system instead of simple scoring
 # This provides much more accurate and context-aware candidate evaluation
