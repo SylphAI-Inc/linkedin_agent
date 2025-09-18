@@ -84,13 +84,10 @@ def smart_candidate_search(
             except:
                 log_debug("Timeout waiting for search results")
 
-            # # Ensure we're on the People results tab
-            # _ensure_people_tab()
-
             # Light scroll to trigger lazy loading
             try:
                 run_js("window.scrollBy(0, 800);")
-                nav_wait('2')
+                nav_wait("2")
             except:
                 pass
 

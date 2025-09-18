@@ -1,7 +1,7 @@
 """LinkedIn authentication detection and handling tools."""
 
 from adalflow.core.func_tool import FunctionTool
-from .web_nav import js as run_js, go as nav_go, wait as nav_wait, click as nav_click
+from .web_nav import js as run_js, go as nav_go, wait as nav_wait
 
 
 def check_auth_status() -> dict:

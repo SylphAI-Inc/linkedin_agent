@@ -342,13 +342,7 @@ def _generate_fallback_recommendation(
     above_threshold = stats["above_threshold"]
 
     # Check current heap state after cleanup
-    try:
-        from .smart_search import get_current_search_heap
-
-        heap = get_current_search_heap()
-        remaining_heap_size = len(heap.heap) if heap and hasattr(heap, "heap") else 0
-    except:
-        remaining_heap_size = 0
+    remaining_heap_size = 0
 
     if above_threshold == 0:
         # No good candidates - check if heap has enough potential or needs expansion
@@ -368,13 +362,7 @@ def _generate_fallback_recommendation(
             }
         else:  # Heap too small, expand search to add more candidates
             # Get the last search page info to continue from where we left off
-            try:
-                from .smart_search import get_last_search_info
-
-                search_info = get_last_search_info()
-                next_page = search_info.get("next_start_page", 3) if search_info else 3
-            except:
-                next_page = 3  # Fallback to page 3
+            next_page = 3  # Fallback to page 3
 
             return {
                 "action": "expand_search_scope",
@@ -400,13 +388,7 @@ def _generate_fallback_recommendation(
             }
         else:  # Heap insufficient, expand search to add more candidates
             # Get the last search page info to continue from where we left off
-            try:
-                from .smart_search import get_last_search_info
-
-                search_info = get_last_search_info()
-                next_page = search_info.get("next_start_page", 3) if search_info else 3
-            except:
-                next_page = 3  # Fallback to page 3
+            next_page = 3  # Fallback to page 3
 
             return {
                 "action": "expand_search_scope",

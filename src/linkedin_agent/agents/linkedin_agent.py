@@ -5,7 +5,6 @@ from adalflow.components.agent.runner import Runner
 from adalflow.components.model_client.openai_client import OpenAIClient
 
 from ..config import AgentConfig, get_model_kwargs
-# from ..tools.linkedin_auth import CheckAuthTool, NavigateLinkedInTool, PromptLoginTool
 from ..tools.smart_search import SmartCandidateSearchTool
 from ..tools.targeted_extraction import ExtractCandidateProfilesTool
 from ..tools.candidate_evaluation import CandidateEvaluationTool
@@ -13,7 +12,6 @@ from ..tools.candidate_outreach import (
     CandidateOutreachGenerationTool,  # New agent tool for outreach generation
     SaveOutreachResultsTool  # Used by workflow manager to save outreach results
 )
-# Strategy tool removed - redundant step
 
 
 class LinkedInAgent:
@@ -40,10 +38,10 @@ class LinkedInAgent:
         # Prepare default tools if none provided
         self.tools = [
             SmartCandidateSearchTool,  # 1. Smart candidate discovery with quality scoring
-            # ExtractCandidateProfilesTool,  # 2. Extract detailed profiles from search results
-            # CandidateEvaluationTool,  # 3. Comprehensive quality evaluation with fallback recommendations
-            # CandidateOutreachGenerationTool,  # 4. Generate personalized outreach messages
-            # SaveOutreachResultsTool,  # Save outreach results to file
+            ExtractCandidateProfilesTool,  # 2. Extract detailed profiles from search results
+            CandidateEvaluationTool,  # 3. Comprehensive quality evaluation with fallback recommendations
+            CandidateOutreachGenerationTool,  # 4. Generate personalized outreach messages
+            SaveOutreachResultsTool,  # Save outreach results to file
         ]
 
         # Get default role description if not provided

@@ -107,7 +107,7 @@ def save_recruitment_results(
                 and isinstance(experiences, list)
                 and len(experiences) > 0
             ):
-                f.write(f"Recent Experience:\n")
+                f.write("Recent Experience:\n")
                 for exp in experiences[:2]:  # Show first 2 experiences
                     if isinstance(exp, dict):
                         f.write(
